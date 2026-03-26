@@ -1,9 +1,9 @@
 {
-  "name": "genui-studio",
+  "name": "@swis/genui-studio",
   "version": "1.0.0",
   "private": false,
   "bin": {
-    "genui-studio": "./bin/cli.js"
+    "genui-studio": "bin/cli.js"
   },
   "scripts": {
     "dev": "vite",
@@ -35,5 +35,20 @@
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
     "vue-tsc": "^2.2.0"
-  }
+  },
+  "description": "An AI-powered visual UI widget builder and design studio",
+  "main": "bin/cli.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/swisnl/genui-widgets.git"
+  },
+  "author": "Joris Meijer",
+  "license": "GPL-3.0-or-later",
+  "bugs": {
+    "url": "https://github.com/swisnl/genui-widgets/issues"
+  },
+  "homepage": "https://github.com/swisnl/genui-widgets#readme"
 }
