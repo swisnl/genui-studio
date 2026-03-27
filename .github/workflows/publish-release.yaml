@@ -1,6 +1,7 @@
 name: Create release and publish to NPM
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - '*'
