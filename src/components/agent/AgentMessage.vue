@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { AgentMessage } from '@/stores/agent'
 import { useAgentStore } from '@/stores/agent'
 
@@ -13,6 +13,12 @@ const roleLabel = computed(() => {
   if (props.message.role === 'user') return 'You'
   return props.message.model ?? agent.modelDisplayName
 })
+
+const expandedTool = ref<number | null>(null)
+
+function toggleTool(i: number) {
+  expandedTool.value = expandedTool.value === i ? null : i
+}
 </script>
 
 <template>
@@ -21,7 +27,8 @@ const roleLabel = computed(() => {
     <div class="agent-message__content">{{ message.content }}</div>
     <div v-if="message.toolCalls?.length" class="agent-message__tools">
       <div v-for="(call, i) in message.toolCalls" :key="i" class="agent-message__tool">
-        <span class="agent-message__tool-name">{{ call.name }}</span>
+        <span class="agent-message__tool-name" @click="toggleTool(i)">{{ call.name }}</span>
+        <pre v-if="expandedTool === i" class="agent-message__tool-payload">{{ JSON.stringify(call.input, null, 2) }}</pre>
       </div>
     </div>
   </div>
@@ -77,6 +84,26 @@ const roleLabel = computed(() => {
   &__tool-name {
     color: var(--studio-accent);
     font-family: monospace;
+    cursor: pointer;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  &__tool-payload {
+    margin-top: 4px;
+    padding: 6px 8px;
+    background: var(--studio-bg);
+    border: 1px solid var(--studio-border);
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: monospace;
+    color: var(--studio-text-primary);
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
   }
 }
 </style>

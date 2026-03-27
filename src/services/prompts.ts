@@ -1,4 +1,4 @@
-import { getSchemaText } from './widgetSchema'
+import { getSchemaText, ICON_NAMES } from './widgetSchema'
 import type { ThemeConfig, WidgetTemplate } from '@swis/genui-widgets'
 import type { CanvasWidget } from '@/types/canvas'
 import type { BaseColors } from '@/utils/deriveTheme'
@@ -123,7 +123,7 @@ These are NOT pixels. They are multiplied by 0.25rem:
 ### Icon
 - Icon renders inline at the text baseline. Default size is "md" (1rem).
 - Use Icon inside a Row alongside text for icon+label patterns.
-- Available icons include: mail, phone, user, profile, calendar, globe, search, star, check, plus, sparkle, bolt, lightbulb, info, map-pin, suitcase, desktop, mobile, document, external-link
+- Available icons: ${ICON_NAMES.join(', ')}
 
 ## Schema & Preview Data
 
@@ -180,6 +180,17 @@ For static widgets that don't use \`{ }\` expressions, schema and previewData ca
 </Card>
 \`\`\`
 
+previewData:
+\`\`\`
+{
+  "name": "Sarah Johnson",
+  "job_title": "Senior Product Designer",
+  "avatar_url": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=56&h=56&fit=crop",
+  "email": "sarah.johnson@company.com",
+  "phone": "+31 6 557 75 99"
+}
+\`\`\`
+
 ## Example: Stat/Metric Card
 \`\`\`xml
 <Card size="sm">
@@ -187,11 +198,22 @@ For static widgets that don't use \`{ }\` expressions, schema and previewData ca
     <Caption value={label} />
     <Title value={value} size="2xl" weight="bold" />
     <Row gap={1}>
-      <Badge label={change} color="success" variant="soft" />
-      <Text value="vs last month" size="xs" color="tertiary" />
+      <Badge label={change} color={changeColor} variant="soft" />
+      <Text value={helper} size="xs" color="tertiary" />
     </Row>
   </Col>
 </Card>
+\`\`\`
+
+previewData:
+\`\`\`
+{
+  "label": "Orders",
+  "value": "1,248",
+  "change": "+8%",
+  "changeColor": "success",
+  "helper": "vs last month"
+}
 \`\`\`
 
 ## Example: Create Event
@@ -231,6 +253,39 @@ For static widgets that don't use \`{ }\` expressions, schema and previewData ca
     </Col>
   </Row>
 </Card>
+\`\`\`
+
+previewData:
+\`\`\`
+{
+  "date": {
+    "name": "Friday",
+    "number": "28"
+  },
+  "events": [
+    {
+      "id": "lunch",
+      "title": "Lunch",
+      "time": "12:00 - 12:45 PM",
+      "color": "red-400",
+      "isNew": false
+    },
+    {
+      "id": "q1-roadmap-review",
+      "title": "Q1 roadmap review",
+      "time": "1:00 - 2:00 PM",
+      "color": "blue-400",
+      "isNew": true
+    },
+    {
+      "id": "team-standup",
+      "title": "Team standup",
+      "time": "3:30 - 4:00 PM",
+      "color": "red-400",
+      "isNew": false
+    }
+  ]
+}
 \`\`\`
 
 ## Rules

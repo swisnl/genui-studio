@@ -59,13 +59,8 @@ const anthropicTools: Anthropic.Tool[] = [
         templateSource: { type: 'string', description: 'JSX-like widget template markup' },
         schema: { type: 'object', description: 'JSON Schema describing the template data variables' },
         previewData: { type: 'object', description: 'Sample data for rendering the template preview' },
-        position: {
-          type: 'object',
-          properties: { x: { type: 'number' }, y: { type: 'number' } },
-          description: 'Optional canvas position',
-        },
       },
-      required: ['name', 'templateSource'],
+      required: ['name', 'templateSource', 'schema', 'previewData'],
     },
   },
   {
@@ -79,7 +74,7 @@ const anthropicTools: Anthropic.Tool[] = [
         schema: { type: 'object', description: 'Updated JSON Schema for template data variables' },
         previewData: { type: 'object', description: 'Updated sample data for preview' },
       },
-      required: ['id', 'templateSource'],
+      required: ['id', 'templateSource', 'schema', 'previewData'],
     },
   },
   {
@@ -112,12 +107,38 @@ const anthropicTools: Anthropic.Tool[] = [
   },
 ]
 
+// OpenAI strict mode requires additionalProperties:false and explicit required on every object,
+// and does NOT support free-form objects (type:'object' without properties).
+// We convert free-form objects to type:'string' (JSON) for OpenAI and parse them in handleToolCall.
+function toStrictSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...schema, additionalProperties: false }
+  if (result.properties && typeof result.properties === 'object') {
+    const props = result.properties as Record<string, Record<string, unknown>>
+    const strictProps: Record<string, Record<string, unknown>> = {}
+    for (const [key, value] of Object.entries(props)) {
+      if (value.type === 'object' && !value.properties) {
+        // Free-form object → JSON string for OpenAI strict mode
+        strictProps[key] = { type: 'string', description: `${value.description || ''} (as JSON string)` }
+      } else if (value.type === 'object') {
+        strictProps[key] = toStrictSchema(value)
+      } else {
+        strictProps[key] = { ...value }
+      }
+    }
+    result.properties = strictProps
+    // Strict mode requires all properties to be listed in required
+    result.required = Object.keys(props)
+  }
+  return result
+}
+
 const openaiTools: OpenAI.Chat.Completions.ChatCompletionTool[] = anthropicTools.map((t) => ({
   type: 'function' as const,
   function: {
     name: t.name,
     description: t.description,
-    parameters: t.input_schema as Record<string, unknown>,
+    parameters: toStrictSchema(t.input_schema as Record<string, unknown>),
+    strict: true,
   },
 }))
 
@@ -144,6 +165,15 @@ function compileAndValidate(
   }
 }
 
+function parseJsonField(value: unknown): Record<string, unknown> | undefined {
+  if (value == null || value === '') return undefined
+  if (typeof value === 'object') return value as Record<string, unknown>
+  if (typeof value === 'string') {
+    try { return JSON.parse(value) } catch { return undefined }
+  }
+  return undefined
+}
+
 function handleToolCall(name: string, input: Record<string, unknown>): string {
   const canvas = useCanvasStore()
   const theme = useThemeStore()
@@ -154,8 +184,8 @@ function handleToolCall(name: string, input: Record<string, unknown>): string {
   switch (name) {
     case 'create_widget': {
       const templateSource = input.templateSource as string
-      const previewData = input.previewData as Record<string, unknown> | undefined
-      const schema = input.schema as Record<string, unknown> | undefined
+      const previewData = parseJsonField(input.previewData)
+      const schema = parseJsonField(input.schema)
 
       const { template, errors } = compileAndValidate(templateSource, previewData)
       if (errors.length > 0) {
@@ -165,7 +195,7 @@ function handleToolCall(name: string, input: Record<string, unknown>): string {
       const widget = canvas.addWidget(
         input.name as string,
         template,
-        input.position as Position | undefined,
+        undefined,
         undefined,
         templateSource,
         schema,
@@ -175,8 +205,8 @@ function handleToolCall(name: string, input: Record<string, unknown>): string {
     }
     case 'update_widget': {
       const templateSource = input.templateSource as string
-      const previewData = input.previewData as Record<string, unknown> | undefined
-      const schema = input.schema as Record<string, unknown> | undefined
+      const previewData = parseJsonField(input.previewData)
+      const schema = parseJsonField(input.schema)
 
       const { template, errors } = compileAndValidate(templateSource, previewData)
       if (errors.length > 0) {

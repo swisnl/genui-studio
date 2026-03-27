@@ -280,6 +280,29 @@ watch(drawerOpen, async (open) => {
   }
 })
 
+watch(() => props.widget.previewData, (newData) => {
+  const data = newData ?? {}
+  previewContext.value = data
+  const json = JSON.stringify(data, null, 2)
+  if (previewDataEditor) {
+    previewDataEditor.dispatch({
+      changes: { from: 0, to: previewDataEditor.state.doc.length, insert: json },
+    })
+  }
+  // Re-render preview with updated data
+  const jsxSource = jsxEditor?.state.doc.toString() ?? ''
+  if (jsxSource.trim()) compileAndUpdate(jsxSource)
+}, { deep: true })
+
+watch(() => props.widget.schema, (newSchema) => {
+  const json = JSON.stringify(newSchema ?? { type: 'object', properties: {} }, null, 2)
+  if (schemaEditor) {
+    schemaEditor.dispatch({
+      changes: { from: 0, to: schemaEditor.state.doc.length, insert: json },
+    })
+  }
+}, { deep: true })
+
 watch(() => props.theme, (t) => {
   if (previewEl.value) applyTheme(previewEl.value, t)
 }, { deep: true })

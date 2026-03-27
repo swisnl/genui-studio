@@ -1,3 +1,15 @@
+// Extracted from @swis/genui-widgets Icon component's icon map
+export const ICON_NAMES = [
+  'info', 'agent', 'analytics', 'atom', 'bolt', 'book-open', 'book-closed', 'book-clock',
+  'calendar', 'chart', 'check', 'check-circle', 'check-circle-filled', 'chevron-left',
+  'chevron-right', 'circle-question', 'compass', 'confetti', 'cube', 'desktop', 'document',
+  'dots-horizontal', 'dots-vertical', 'empty-circle', 'external-link', 'globe', 'keys', 'lab',
+  'image', 'images', 'lifesaver', 'lightbulb', 'mail', 'map-pin', 'maps', 'mobile', 'notebook',
+  'notebook-pencil', 'page-blank', 'phone', 'play', 'plus', 'profile', 'profile-card', 'reload',
+  'star', 'star-filled', 'search', 'sparkle', 'sparkle-double', 'square-code', 'square-image',
+  'square-text', 'suitcase', 'settings-slider', 'user', 'wreath', 'write', 'write-alt', 'write-alt2',
+] as const
+
 // JSON schema describing all widget types for the AI agent system prompt
 export const widgetSchema = {
   description: 'Schema for GenUI widget templates. A widget template is a JSON tree of nodes. All props are FLAT on the node — never nested under "props".',
@@ -217,7 +229,7 @@ export const widgetSchema = {
     Icon: {
       description: 'Inline icon. Renders as an SVG.',
       props: {
-        name: { type: 'string', required: true, description: 'Available: mail, phone, user, profile, profile-card, calendar, chart, search, settings-slider, star, star-filled, check, check-circle, plus, sparkle, sparkle-double, write, globe, bolt, lightbulb, info, book-open, compass, cube, desktop, mobile, document, external-link, map-pin, suitcase, lab, lifesaver, notebook, play, reload, square-code, square-image, square-text, wreath, image, keys, agent, analytics, atom, confetti' },
+        name: { type: 'string', required: true, description: `Available: ${ICON_NAMES.join(', ')}` },
         size: { type: 'string', enum: ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl'], default: 'md' },
         color: { type: 'string', description: 'Text color token: "prose", "primary", "secondary", "tertiary", "success", "danger", "warning"' },
       },
@@ -244,7 +256,13 @@ export const widgetSchema = {
         minSize: { type: 'string|number', description: 'Minimum size. Numbers become px.' },
       },
     },
-    ListView: { description: 'Vertical list container. Use with ListViewItem children.', props: {}, children: true },
+    ListView: {
+      description: 'Vertical list container. Use with ListViewItem children.',
+      props: {
+        gap: { type: 'number', description: 'SpacingSize between children', default: 3 }
+      },
+      children: true
+    },
     ListViewItem: {
       description: 'List row. Renders as a horizontal row.',
       props: { onClickAction: { type: 'WidgetAction' } },

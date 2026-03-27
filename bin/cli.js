@@ -59,5 +59,5 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(port, () => {
-  console.log(`🚀 genui-studio is running at http://localhost:${port}`);
+  console.log(`🚀 genui-studio is running at http://localhost:${port}/genui-studio/`);
 });
