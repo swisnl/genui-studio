@@ -42,12 +42,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/swisnl/genui-widgets.git"
+    "url": "git+https://github.com/swisnl/genui-studio.git"
   },
   "author": "Joris Meijer",
   "license": "GPL-3.0-or-later",
   "bugs": {
-    "url": "https://github.com/swisnl/genui-widgets/issues"
+    "url": "https://github.com/swisnl/genui-studio/issues"
   },
-  "homepage": "https://github.com/swisnl/genui-widgets#readme"
+  "homepage": "https://github.com/swisnl/genui-studio#readme"
 }
