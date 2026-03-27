@@ -1,11 +1,17 @@
 {
   "name": "@swis/genui-studio",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": false,
+  "type": "module",
+  "files": [
+    "bin",
+    "dist"
+  ],
   "bin": {
     "genui-studio": "bin/cli.js"
   },
   "scripts": {
+    "prepack": "npm run build",
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview"
