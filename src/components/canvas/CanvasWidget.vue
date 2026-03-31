@@ -62,7 +62,8 @@ function downloadWidget(e: MouseEvent) {
     defaultState: props.widget.previewData ?? {},
     states: [],
   })
-  const b64 = btoa(payload).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const bytes = new TextEncoder().encode(payload)
+  const b64 = btoa(String.fromCodePoint(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 
   // Compile JSX → nunjucks template
   let nunjucksTemplate = ''

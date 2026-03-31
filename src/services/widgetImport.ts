@@ -17,7 +17,8 @@ export interface WidgetFileData {
 function decodeUrlSafeBase64(encoded: string): string {
   let b64 = encoded.replace(/-/g, '+').replace(/_/g, '/')
   while (b64.length % 4) b64 += '='
-  return atob(b64)
+  const bytes = Uint8Array.from(atob(b64), c => c.codePointAt(0)!)
+  return new TextDecoder().decode(bytes)
 }
 
 /**
