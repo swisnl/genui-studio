@@ -58,6 +58,21 @@ Widgets are authored in an XML/HTML-like markup that compiles to Jinja2 JSON tem
 </Row>
 \`\`\`
 
+\`\`\`xml
+<Card>
+  {fields.map((field) => (
+    <Col gap={2}>
+      <Label value={field.label} fieldName={field.name} />
+      {field.type === 'text' && <Input name={field.name} placeholder={field.placeholder} />}
+      {field.type === 'textarea' && <Textarea name={field.name} placeholder={field.placeholder} />}
+      {field.type === 'checkbox' && <Checkbox name={field.name} label={field.placeholder} />}
+      {field.type === 'radio' && <RadioGroup name={field.name} options={field.options} direction="col" />}
+      <Caption value={field.helpText} />
+    </Col>
+  ))}
+</Row>
+\`\`\`
+
 ## Widget Schema
 ${getSchemaText()}
 
@@ -287,6 +302,47 @@ previewData:
   ]
 }
 \`\`\`
+
+## Editable Text
+
+Text components can be made inline-editable by adding the \`editable\` prop. This turns the text into a form field that submits its value with the Card's confirm action (or a wrapping Form). Use this instead of Input/Textarea when you want inline editing that blends with the surrounding text.
+
+\`\`\`xml
+<Card
+  size="lg"
+  confirm={{ label: "Send email", action: { type: "email.send" } }}
+  cancel={{ label: "Discard", action: { type: "email.discard" } }}
+>
+  <Row>
+    <Text value="TO" width={80} weight="semibold" color="tertiary" size="xs" />
+    <Text
+      value={defaultTo}
+      editable={{ name: "email.to", required: true, placeholder: "name@example.com" }}
+    />
+  </Row>
+  <Divider flush />
+  <Row>
+    <Text value="SUBJECT" width={80} weight="semibold" color="tertiary" size="xs" />
+    <Text
+      value={defaultSubject}
+      editable={{ name: "email.subject", required: true, placeholder: "Email subject" }}
+    />
+  </Row>
+  <Divider flush />
+  <Text
+    value={defaultBody}
+    minLines={9}
+    editable={{ name: "email.body", required: true, placeholder: "Write your message…" }}
+  />
+</Card>
+\`\`\`
+
+- \`editable.name\`: Form field name (required). Used as the key when submitting.
+- \`editable.required\`: Whether the field must be filled.
+- \`editable.placeholder\`: Placeholder text when the value is empty.
+- \`minLines\`: Sets the minimum visible height (in lines) for editable text areas. Only applies when \`editable\` is set.
+- Use \`Divider flush\` between rows to remove spacing and create tight form-like layouts.
+- Prefer editable Text over Input/Textarea when the UI should look like readable content that happens to be editable.
 
 ## Rules
 - Use the JSX-like markup syntax described above. Do NOT output raw JSON templates.

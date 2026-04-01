@@ -89,8 +89,11 @@ export const widgetSchema = {
         weight: { type: 'string', enum: ['normal', 'medium', 'semibold', 'bold'], default: 'normal' },
         color: { type: 'string', default: 'prose', description: 'Text color token: "prose", "primary", "secondary", "tertiary", "success", "danger", "warning"' },
         textAlign: { type: 'string', enum: ['start', 'center', 'end', 'justify'] },
+        width: { type: 'string|number', description: 'CSS width. Numbers become px. Useful for fixed-width labels.' },
         truncate: { type: 'boolean', description: 'Single-line ellipsis' },
         maxLines: { type: 'number', description: 'Multi-line clamp' },
+        minLines: { type: 'number', description: 'Minimum visible lines. Only applies when editable is set.' },
+        editable: { type: 'EditableConfig', description: 'Makes the text inline-editable. The edited value is submitted as a form field.' },
       },
     },
     Title: {
@@ -248,6 +251,7 @@ export const widgetSchema = {
       props: {
         color: { type: 'string', enum: ['default', 'subtle', 'strong'] },
         spacing: { type: 'number', description: 'Vertical margin (SpacingSize)' },
+        flush: { type: 'boolean', description: 'Removes vertical spacing so the divider sits flush against adjacent content' },
       },
     },
     Spacer: {
@@ -273,6 +277,12 @@ export const widgetSchema = {
     CardAction: { label: { type: 'string', required: true }, action: { type: 'WidgetAction', required: true} },
     WidgetAction: { type: { type: 'string', required: true }, payload: { type: 'object' }, handling: { type: 'string', enum: ['client', 'server'] } },
     WidgetOption: { label: { type: 'string', required: true }, value: { type: 'string|number|boolean', required: true } },
+    EditableConfig: {
+      description: 'Configuration for inline-editable Text. Turns the text into a form field whose value is submitted with the form.',
+      name: { type: 'string', required: true, description: 'Form field name (used for submission, like Input name)' },
+      required: { type: 'boolean', description: 'Whether the field is required' },
+      placeholder: { type: 'string', description: 'Placeholder shown when the value is empty' },
+    },
     SpacingSize: { description: 'Number value. 0|1|2|4|6|8|10|12|16|20|24. Converted to rem: value * 0.25rem (so 4 = 1rem, 8 = 2rem, 16 = 4rem).' },
   },
 }
