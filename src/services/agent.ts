@@ -9,7 +9,6 @@ import { buildSystemPrompt, buildUserContext } from './prompts'
 import { validateTemplate, normalizeTemplate } from './validation'
 import { compileJsx } from './jsx-compiler'
 import { resolveTemplate } from '@swis/genui-widgets'
-import type { Position } from '@/types/canvas'
 import type { BaseColors } from '@/utils/deriveTheme'
 import type { ThemePreset } from '@/stores/theme'
 
@@ -132,22 +131,18 @@ function toStrictSchema(schema: Record<string, unknown>): Record<string, unknown
   return result
 }
 
-const openaiTools: OpenAI.Chat.Completions.ChatCompletionTool[] = anthropicTools.map((t) => ({
+// The Responses API takes flat function tools (no nested `function` wrapper).
+const openaiTools: OpenAI.Responses.FunctionTool[] = anthropicTools.map((t) => ({
   type: 'function' as const,
-  function: {
-    name: t.name,
-    description: t.description,
-    parameters: toStrictSchema(t.input_schema as Record<string, unknown>),
-    strict: true,
-  },
+  name: t.name,
+  description: t.description,
+  parameters: toStrictSchema(t.input_schema as Record<string, unknown>),
+  strict: true,
 }))
 
-// Map our display model IDs to actual API model IDs
-const OPENAI_MODEL_MAP: Record<string, string> = {
-  'chatgpt-5.4': 'gpt-5.4',
-  'chatgpt-5.4-mini': 'gpt-5.4-mini',
-  'chatgpt-5.4-nano': 'gpt-5.4-nano',
-}
+// Reasoning tokens count against max_output_tokens, so the OpenAI budget needs
+// significantly more headroom than Anthropic's to still fit a widget template.
+const OPENAI_MAX_OUTPUT_TOKENS = 16384
 
 function compileAndValidate(
   templateSource: string,
@@ -321,72 +316,75 @@ async function sendMessageOpenAI(
   systemPrompt: string,
 ) {
   const client = new OpenAI({ apiKey: agent.openaiApiKey, dangerouslyAllowBrowser: true })
-  const apiModelId = OPENAI_MODEL_MAP[agent.selectedModel] ?? agent.selectedModel
 
   agent.setThinkingPhase('Generating')
 
-  const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: 'system', content: systemPrompt },
-    ...userMessages.map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    })),
-  ]
+  // The system prompt moves to `instructions`; conversation turns become input items.
+  const input: OpenAI.Responses.ResponseInputItem[] = userMessages.map((m) => ({
+    role: m.role as 'user' | 'assistant',
+    content: m.content,
+  }))
 
-  let response = await client.chat.completions.create({
-    model: apiModelId,
-    max_completion_tokens: 4096,
-    tools: openaiTools,
-    messages: openaiMessages,
-  })
+  const createResponse = () =>
+    client.responses.create({
+      model: agent.selectedModel,
+      instructions: systemPrompt,
+      max_output_tokens: OPENAI_MAX_OUTPUT_TOKENS,
+      tools: openaiTools,
+      input,
+      // Nothing is persisted server-side, so reasoning has to travel with the
+      // request for the model to keep its chain of thought across tool turns.
+      store: false,
+      include: ['reasoning.encrypted_content'],
+    })
+
+  let response = await createResponse()
 
   let textContent = ''
   const toolCallsLog: { name: string; input: Record<string, unknown> }[] = []
 
   while (true) {
-    const choice = response.choices[0]
-    const message = choice.message
-
-    if (message.content) {
-      textContent += message.content
+    if (response.output_text) {
+      textContent += response.output_text
       agent.streamingContent = textContent
     }
 
-    if (message.tool_calls && message.tool_calls.length > 0) {
-      agent.setThinkingPhase('Validating')
+    const functionCalls = response.output.filter(
+      (item): item is OpenAI.Responses.ResponseFunctionToolCall => item.type === 'function_call',
+    )
 
-      // Add assistant message with tool calls to conversation
-      openaiMessages.push(message)
+    if (functionCalls.length === 0) {
+      if (response.status === 'incomplete') {
+        throw new Error(
+          `Response was cut short (${response.incomplete_details?.reason ?? 'unknown reason'}).`,
+        )
+      }
+      break
+    }
 
-      for (const toolCall of message.tool_calls) {
-        if (toolCall.type !== 'function') continue
-        const input = JSON.parse(toolCall.function.arguments) as Record<string, unknown>
-        const result = handleToolCall(toolCall.function.name, input)
-        toolCallsLog.push({ name: toolCall.function.name, input })
+    agent.setThinkingPhase('Validating')
 
-        openaiMessages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          content: result,
-        })
+    // Replay every output item — reasoning items included — before the outputs.
+    input.push(...response.output)
 
-        if (result.startsWith('VALIDATION_ERROR:')) {
-          agent.setThinkingPhase('Retrying (invalid template)')
-        }
+    for (const call of functionCalls) {
+      const args = JSON.parse(call.arguments) as Record<string, unknown>
+      const result = handleToolCall(call.name, args)
+      toolCallsLog.push({ name: call.name, input: args })
+
+      input.push({
+        type: 'function_call_output',
+        call_id: call.call_id,
+        output: result,
+      })
+
+      if (result.startsWith('VALIDATION_ERROR:')) {
+        agent.setThinkingPhase('Retrying (invalid template)')
       }
     }
 
-    if (choice.finish_reason === 'tool_calls') {
-      agent.setThinkingPhase('Generating')
-      response = await client.chat.completions.create({
-        model: apiModelId,
-        max_completion_tokens: 4096,
-        tools: openaiTools,
-        messages: openaiMessages,
-      })
-    } else {
-      break
-    }
+    agent.setThinkingPhase('Generating')
+    response = await createResponse()
   }
 
   return { textContent, toolCallsLog }
