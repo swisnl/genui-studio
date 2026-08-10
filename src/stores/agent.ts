@@ -19,12 +19,12 @@ export interface ModelOption {
 }
 
 export const MODEL_OPTIONS: ModelOption[] = [
-  { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', family: 'anthropic' },
-  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', family: 'anthropic' },
+  { id: 'claude-opus-5', label: 'Claude Opus 5', family: 'anthropic' },
+  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', family: 'anthropic' },
   { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', family: 'anthropic' },
-  { id: 'chatgpt-5.4', label: 'ChatGPT 5.4', family: 'openai' },
-  { id: 'chatgpt-5.4-mini', label: 'ChatGPT 5.4 mini', family: 'openai' },
-  { id: 'chatgpt-5.4-nano', label: 'ChatGPT 5.4 nano', family: 'openai' },
+  { id: 'gpt-5.6-sol', label: 'ChatGPT 5.6 - Sol', family: 'openai' },
+  { id: 'gpt-5.6-terra', label: 'ChatGPT 5.6 - Terra', family: 'openai' },
+  { id: 'gpt-5.6-luna', label: 'ChatGPT 5.6 - Luna', family: 'openai' },
 ]
 
 export const useAgentStore = defineStore('agent', () => {
@@ -34,7 +34,7 @@ export const useAgentStore = defineStore('agent', () => {
   const thinkingPhase = ref<string | null>(null)
   const apiKey = ref(localStorage.getItem('genui-studio-api-key') ?? '')
   const openaiApiKey = ref(localStorage.getItem('genui-studio-openai-api-key') ?? '')
-  const selectedModel = ref(localStorage.getItem('genui-studio-selected-model') ?? 'claude-sonnet-4-6')
+  const selectedModel = ref(localStorage.getItem('genui-studio-selected-model') ?? 'gpt-5.6-luna')
   const error = ref<string | null>(null)
 
   const hasApiKey = computed(() => apiKey.value.length > 0)
