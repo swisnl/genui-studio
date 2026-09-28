@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch } from 'vue'
-import { useAgentStore, MODEL_OPTIONS } from '@/stores/agent'
+import { useAgentStore } from '@/stores/agent'
 import type { AgentImage } from '@/stores/agent'
 import { useCanvasStore } from '@/stores/canvas'
 import { useSelectionStore } from '@/stores/selection'
 import { getElementAtPath } from '@/services/prompts'
 import { sendMessage } from '@/services/agent'
+import { isEmbedded } from '@/embed/mode'
+import { t } from '@/i18n'
 import { SUPPORTED_IMAGE_TYPES, imageToDataUrl, isSupportedImage, readImageFile } from '@/utils/image'
 
 const MAX_IMAGES = 5
@@ -56,8 +58,8 @@ const context = computed(() => {
 
 const apiKeyPlaceholder = computed(() =>
   agent.modelFamily === 'anthropic'
-    ? 'Enter your Anthropic API key (sk-ant-...)'
-    : 'Enter your OpenAI API key (sk-...)',
+    ? t('prompt.apiKeyAnthropic')
+    : t('prompt.apiKeyOpenai'),
 )
 
 const modelShortName = computed(() => {
@@ -69,8 +71,16 @@ const modelShortName = computed(() => {
   return opt.label.replace('ChatGPT ', '')
 })
 
-const anthropicModels = MODEL_OPTIONS.filter((m) => m.family === 'anthropic')
-const openaiModels = MODEL_OPTIONS.filter((m) => m.family === 'openai')
+const FAMILY_LABELS = { anthropic: 'Anthropic', openai: 'OpenAI' } as const
+
+const modelGroups = computed(() => {
+  const groups = new Map<string, typeof agent.models>()
+  for (const m of agent.models) {
+    const label = m.group ?? FAMILY_LABELS[m.family]
+    groups.set(label, [...(groups.get(label) ?? []), m])
+  }
+  return [...groups].map(([label, models]) => ({ label, models }))
+})
 
 function resizeTextarea() {
   const el = textareaRef.value
@@ -89,7 +99,7 @@ function selectModel(modelId: string) {
   agent.setSelectedModel(modelId)
   showModelSelect.value = false
   // If no API key for the new family, prompt for it
-  if (!agent.hasActiveApiKey) {
+  if (!agent.hasActiveApiKey && !isEmbedded) {
     showApiKey.value = true
   }
 }
@@ -98,17 +108,17 @@ async function addImageFiles(files: Iterable<File>) {
   imageError.value = null
   for (const file of files) {
     if (!isSupportedImage(file)) {
-      imageError.value = `"${file.name}" is not a supported image (PNG, JPEG, GIF or WebP).`
+      imageError.value = t('prompt.unsupportedImage', { name: file.name })
       continue
     }
     if (images.value.length >= MAX_IMAGES) {
-      imageError.value = `You can attach up to ${MAX_IMAGES} images per message.`
+      imageError.value = t('prompt.tooManyImages', { max: MAX_IMAGES })
       break
     }
     try {
       images.value.push(await readImageFile(file))
     } catch (err) {
-      imageError.value = err instanceof Error ? err.message : 'Failed to read image'
+      imageError.value = err instanceof Error ? err.message : t('prompt.readImageFailed')
     }
   }
 }
@@ -158,7 +168,7 @@ async function onSubmit() {
   const text = prompt.value.trim()
   if (!canSubmit.value) return
 
-  if (!agent.hasActiveApiKey) {
+  if (!agent.hasActiveApiKey && !isEmbedded) {
     showApiKey.value = true
     return
   }
@@ -198,22 +208,10 @@ function onKeyDown(e: KeyboardEvent) {
     <!-- Model selector dropdown -->
     <Transition name="dropdown">
       <div v-if="showModelSelect" class="prompt-bar__model-dropdown">
-        <div class="prompt-bar__model-group">
-          <div class="prompt-bar__model-group-label">Anthropic</div>
+        <div v-for="group in modelGroups" :key="group.label" class="prompt-bar__model-group">
+          <div class="prompt-bar__model-group-label">{{ group.label }}</div>
           <button
-            v-for="m in anthropicModels"
-            :key="m.id"
-            class="prompt-bar__model-option"
-            :class="{ 'prompt-bar__model-option--active': m.id === agent.selectedModel }"
-            @click="selectModel(m.id)"
-          >
-            {{ m.label }}
-          </button>
-        </div>
-        <div class="prompt-bar__model-group">
-          <div class="prompt-bar__model-group-label">OpenAI</div>
-          <button
-            v-for="m in openaiModels"
+            v-for="m in group.models"
             :key="m.id"
             class="prompt-bar__model-option"
             :class="{ 'prompt-bar__model-option--active': m.id === agent.selectedModel }"
@@ -234,8 +232,8 @@ function onKeyDown(e: KeyboardEvent) {
         class="prompt-bar__apikey-input"
         @keydown.enter="saveApiKey"
       />
-      <button class="prompt-bar__apikey-save" @click="saveApiKey">Save</button>
-      <button class="prompt-bar__apikey-cancel" @click="showApiKey = false">Cancel</button>
+      <button class="prompt-bar__apikey-save" @click="saveApiKey">{{ t('prompt.save') }}</button>
+      <button class="prompt-bar__apikey-cancel" @click="showApiKey = false">{{ t('prompt.cancel') }}</button>
     </div>
 
     <!-- Main prompt bar -->
@@ -277,10 +275,10 @@ function onKeyDown(e: KeyboardEvent) {
           class="prompt-bar__image"
           :title="img.name"
         >
-          <img :src="imageToDataUrl(img)" :alt="img.name ?? `Image ${i + 1}`" />
+          <img :src="imageToDataUrl(img)" :alt="img.name ?? t('prompt.imageAlt', { n: i + 1 })" />
           <button
             class="prompt-bar__image-remove"
-            :aria-label="`Remove ${img.name ?? 'image'}`"
+            :aria-label="t('prompt.removeImage', { name: img.name ?? t('prompt.image') })"
             @click="removeImage(i)"
           >
             <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
@@ -294,7 +292,7 @@ function onKeyDown(e: KeyboardEvent) {
         ref="textareaRef"
         v-model="prompt"
         class="prompt-bar__input"
-        :placeholder="context ? `Edit ${context.widgetNames[0]}...` : 'What would you like to change or create?'"
+        :placeholder="context ? t('prompt.placeholderEdit', { name: context.widgetNames[0] }) : t('prompt.placeholder')"
         rows="1"
         :disabled="agent.isStreaming"
         @keydown="onKeyDown"
@@ -321,7 +319,7 @@ function onKeyDown(e: KeyboardEvent) {
       <div class="prompt-bar__actions">
         <button
           class="prompt-bar__action-btn"
-          data-tooltip="Attach image"
+          :data-tooltip="t('prompt.attachImage')"
           :disabled="agent.isStreaming || images.length >= MAX_IMAGES"
           @click="fileInputRef?.click()"
         >
@@ -334,13 +332,13 @@ function onKeyDown(e: KeyboardEvent) {
         <div class="prompt-bar__divider" />
         <button
           class="prompt-bar__model-btn"
-          data-tooltip="Select model"
+          :data-tooltip="t('prompt.selectModel')"
           @click="showModelSelect = !showModelSelect"
         >
           {{ modelShortName }}
         </button>
-        <div class="prompt-bar__divider" />
-        <button class="prompt-bar__action-btn" data-tooltip="API key" @click="showApiKey = !showApiKey">
+        <div v-if="!isEmbedded" class="prompt-bar__divider" />
+        <button v-if="!isEmbedded" class="prompt-bar__action-btn" :data-tooltip="t('prompt.apiKey')" @click="showApiKey = !showApiKey">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M10 6a2 2 0 1 0-4 0 2 2 0 0 0 2 2v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
             <path d="M7 10h2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>

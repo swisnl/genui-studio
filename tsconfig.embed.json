@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist-embed",
+    "rootDir": "src/embed"
+  },
+  "include": ["src/embed/client.ts", "src/embed/protocol.ts"]
+}

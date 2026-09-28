@@ -2,6 +2,7 @@
 import { ref, watch, nextTick, computed } from 'vue'
 import { useAgentStore } from '@/stores/agent'
 import AgentMessage from './AgentMessage.vue'
+import { t } from '@/i18n'
 
 defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -29,7 +30,7 @@ watch(() => agent.messages.length, async () => {
           </svg>
         </div>
         <div class="chat-card__header-text">
-          <span class="chat-card__title">Agent Log</span>
+          <span class="chat-card__title">{{ t('chat.title') }}</span>
         </div>
         <button class="chat-card__close" @click="emit('close')">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -49,7 +50,7 @@ watch(() => agent.messages.length, async () => {
             <div class="chat-card__thinking-dots">
               <span /><span /><span />
             </div>
-            <span class="chat-card__thinking-label">{{ agent.thinkingPhase || 'Thinking' }}</span>
+            <span class="chat-card__thinking-label">{{ t(`chat.phase.${agent.thinkingPhase ?? 'thinking'}`) }}</span>
           </div>
           <template v-else>
             <div class="chat-card__streaming-label">{{ streamingLabel }}</div>

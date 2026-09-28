@@ -18,6 +18,7 @@ import { compileJsx } from '@/services/jsx-compiler'
 import { decompileToJsx } from '@/services/jsx-decompiler'
 import { useCanvasStore } from '@/stores/canvas'
 import type { CanvasWidget } from '@/types/canvas'
+import { t } from '@/i18n'
 
 const props = defineProps<{
   widget: CanvasWidget
@@ -321,7 +322,7 @@ onUnmounted(() => {
       <div class="we__header">
         <span class="we__title">{{ widget.name }}</span>
         <div class="we__actions">
-          <button class="we__btn" :title="copied ? 'Copied!' : 'Copy JSX'" @click="copyTemplate">
+          <button class="we__btn" :title="copied ? t('widgetEditor.copiedJsx') : t('widgetEditor.copyJsx')" @click="copyTemplate">
             <svg v-if="!copied" width="14" height="14" viewBox="0 0 14 14" fill="none">
               <rect x="4" y="4" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.2"/>
               <path d="M10 4V3.5A1.5 1.5 0 0 0 8.5 2h-5A1.5 1.5 0 0 0 2 3.5v5A1.5 1.5 0 0 0 3.5 10H4" stroke="currentColor" stroke-width="1.2"/>
@@ -329,7 +330,7 @@ onUnmounted(() => {
             <svg v-else width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M3 7.5l3 3 5-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            {{ copied ? 'Copied' : 'Copy' }}
+            {{ copied ? t('widgetEditor.copied') : t('widgetEditor.copy') }}
           </button>
           <button
             class="we__btn"
@@ -340,9 +341,9 @@ onUnmounted(() => {
               <rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.2"/>
               <line x1="1" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="1.2"/>
             </svg>
-            Data
+            {{ t('widgetEditor.data') }}
           </button>
-          <button class="we__close" title="Close" @click="emit('close')">
+          <button class="we__close" :title="t('widgetEditor.close')" @click="emit('close')">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
             </svg>
@@ -356,7 +357,7 @@ onUnmounted(() => {
       >
         <!-- Left: JSX Editor -->
         <div class="we__code" :style="leftStyle">
-          <div class="we__code-label">Template (JSX)</div>
+          <div class="we__code-label">{{ t('widgetEditor.template') }}</div>
           <div ref="jsxEditorEl" class="we__editor" />
         </div>
 
@@ -373,8 +374,8 @@ onUnmounted(() => {
         <!-- Right: Live Preview -->
         <div class="we__preview" :style="rightStyle">
           <div class="we__preview-label">
-            Preview
-            <span v-if="compilationError" class="we__error-badge">Error</span>
+            {{ t('widgetEditor.preview') }}
+            <span v-if="compilationError" class="we__error-badge">{{ t('widgetEditor.error') }}</span>
           </div>
           <div ref="previewEl" class="we__preview-content genui-widget-root">
             <div v-if="compilationError" class="we__error-banner">
@@ -411,14 +412,14 @@ onUnmounted(() => {
             :class="{ 'we__drawer-tab--active': activeTab === 'previewData' }"
             @click="activeTab = 'previewData'"
           >
-            Preview Data
+            {{ t('widgetEditor.previewData') }}
           </button>
           <button
             class="we__drawer-tab"
             :class="{ 'we__drawer-tab--active': activeTab === 'schema' }"
             @click="activeTab = 'schema'"
           >
-            Schema
+            {{ t('widgetEditor.schema') }}
           </button>
         </div>
 

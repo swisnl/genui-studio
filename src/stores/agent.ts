@@ -1,5 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { isEmbedded } from '@/embed/mode'
+import type { ModelFamily, ModelOption, ProviderConfig } from '@/embed/protocol'
+
+export type { ModelFamily, ModelOption, ProviderConfig }
 
 export interface AgentImage {
   mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
@@ -18,13 +22,8 @@ export interface AgentMessage {
   model?: string
 }
 
-export type ModelFamily = 'anthropic' | 'openai'
-
-export interface ModelOption {
-  id: string
-  label: string
-  family: ModelFamily
-}
+/** Progress of an agent run; shown translated in the agent log. */
+export type ThinkingPhase = 'thinking' | 'generating' | 'validating' | 'applying' | 'retrying'
 
 export const MODEL_OPTIONS: ModelOption[] = [
   { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', family: 'anthropic' },
@@ -38,48 +37,90 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: 'gpt-5.6-luna', label: 'ChatGPT 5.6 - Luna', family: 'openai' },
 ]
 
+// An embedded studio gets its keys and model from the host, never from this browser's storage.
+const storage = {
+  get: (key: string) => (isEmbedded ? null : localStorage.getItem(key)),
+  set: (key: string, value: string) => { if (!isEmbedded) localStorage.setItem(key, value) },
+  remove: (key: string) => { if (!isEmbedded) localStorage.removeItem(key) },
+}
+
 export const useAgentStore = defineStore('agent', () => {
   const messages = ref<AgentMessage[]>([])
   const isStreaming = ref(false)
   const streamingContent = ref('')
-  const thinkingPhase = ref<string | null>(null)
-  const apiKey = ref(localStorage.getItem('genui-studio-api-key') ?? '')
-  const openaiApiKey = ref(localStorage.getItem('genui-studio-openai-api-key') ?? '')
-  const selectedModel = ref(localStorage.getItem('genui-studio-selected-model') ?? 'gpt-5.6-luna')
+  const thinkingPhase = ref<ThinkingPhase | null>(null)
+  const apiKey = ref(storage.get('genui-studio-api-key') ?? '')
+  const openaiApiKey = ref(storage.get('genui-studio-openai-api-key') ?? '')
+  const selectedModel = ref(storage.get('genui-studio-selected-model') ?? 'gpt-5.6-luna')
+  const models = ref<ModelOption[]>(MODEL_OPTIONS)
+  const providers = ref<{ openai?: ProviderConfig; anthropic?: ProviderConfig }>({})
   const error = ref<string | null>(null)
+  /** HTTP status of the last failed LLM request, if any */
+  const errorStatus = ref<number | null>(null)
 
   const hasApiKey = computed(() => apiKey.value.length > 0)
   const hasOpenaiApiKey = computed(() => openaiApiKey.value.length > 0)
 
-  const modelOption = computed(() => MODEL_OPTIONS.find((m) => m.id === selectedModel.value)
-    ?? MODEL_OPTIONS.find((m) => m.id === 'claude-sonnet-5')!)
+  const modelOption = computed(() => models.value.find((m) => m.id === selectedModel.value)
+    ?? models.value.find((m) => m.id === 'claude-sonnet-5')
+    ?? models.value[0]
+    ?? MODEL_OPTIONS[0])
   const modelFamily = computed<ModelFamily>(() => modelOption.value.family)
   const modelDisplayName = computed(() => modelOption.value.label)
-  const hasActiveApiKey = computed(() =>
-    modelFamily.value === 'anthropic' ? hasApiKey.value : hasOpenaiApiKey.value,
-  )
+  // A host-configured provider (e.g. a proxy) authenticates on its own, so no key is needed.
+  const hasActiveApiKey = computed(() => {
+    const provider = providers.value[modelFamily.value]
+    if (provider?.baseURL || provider?.apiKey) return true
+    return modelFamily.value === 'anthropic' ? hasApiKey.value : hasOpenaiApiKey.value
+  })
 
   function setApiKey(key: string) {
     apiKey.value = key
     if (key) {
-      localStorage.setItem('genui-studio-api-key', key)
+      storage.set('genui-studio-api-key', key)
     } else {
-      localStorage.removeItem('genui-studio-api-key')
+      storage.remove('genui-studio-api-key')
     }
   }
 
   function setOpenaiApiKey(key: string) {
     openaiApiKey.value = key
     if (key) {
-      localStorage.setItem('genui-studio-openai-api-key', key)
+      storage.set('genui-studio-openai-api-key', key)
     } else {
-      localStorage.removeItem('genui-studio-openai-api-key')
+      storage.remove('genui-studio-openai-api-key')
     }
   }
 
   function setSelectedModel(modelId: string) {
     selectedModel.value = modelId
-    localStorage.setItem('genui-studio-selected-model', modelId)
+    storage.set('genui-studio-selected-model', modelId)
+  }
+
+  function configure(config: {
+    providers?: { openai?: ProviderConfig; anthropic?: ProviderConfig }
+    models?: ModelOption[]
+    defaultModel?: string
+  }) {
+    if (config.providers) {
+      const next = { ...providers.value }
+      for (const family of ['openai', 'anthropic'] as const) {
+        const provider = config.providers[family]
+        if (!provider) continue
+        // The SDKs need absolute URLs; allow hosts to pass e.g. `/llm/v1`.
+        next[family] = {
+          ...provider,
+          baseURL: provider.baseURL ? new URL(provider.baseURL, window.location.href).href : undefined,
+        }
+      }
+      providers.value = next
+    }
+    if (config.models?.length) models.value = config.models
+    if (config.defaultModel) {
+      selectedModel.value = config.defaultModel
+    } else if (!models.value.some((m) => m.id === selectedModel.value)) {
+      selectedModel.value = models.value[0].id
+    }
   }
 
   function addUserMessage(content: string, images?: AgentImage[]): AgentMessage {
@@ -119,7 +160,7 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  function setThinkingPhase(phase: string | null) {
+  function setThinkingPhase(phase: ThinkingPhase | null) {
     thinkingPhase.value = phase
   }
 
@@ -127,8 +168,9 @@ export const useAgentStore = defineStore('agent', () => {
     streamingContent.value += chunk
   }
 
-  function setError(msg: string | null) {
+  function setError(msg: string | null, status: number | null = null) {
     error.value = msg
+    errorStatus.value = msg ? status : null
   }
 
   return {
@@ -139,7 +181,10 @@ export const useAgentStore = defineStore('agent', () => {
     apiKey,
     openaiApiKey,
     selectedModel,
+    models,
+    providers,
     error,
+    errorStatus,
     hasApiKey,
     hasOpenaiApiKey,
     hasActiveApiKey,
@@ -149,6 +194,7 @@ export const useAgentStore = defineStore('agent', () => {
     setApiKey,
     setOpenaiApiKey,
     setSelectedModel,
+    configure,
     addUserMessage,
     addAssistantMessage,
     clearMessages,

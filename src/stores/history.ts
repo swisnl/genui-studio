@@ -61,7 +61,8 @@ export const useHistoryStore = defineStore('history', () => {
     canvas.widgets = cloneWidgets(snapshot.widgets)
     theme.lightColors = { ...snapshot.lightColors }
     theme.darkColors = { ...snapshot.darkColors }
-    theme.activePreset = snapshot.activePreset
+    // A host-controlled light/dark mode is not part of the undo history
+    if (!theme.colorSchemeLocked) theme.activePreset = snapshot.activePreset
   }
 
   function commit() {

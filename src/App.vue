@@ -12,6 +12,9 @@ import ChatCard from '@/components/agent/ChatCard.vue'
 import FloatingPanel from '@/components/panels/FloatingPanel.vue'
 import WidgetList from '@/components/sidebar/WidgetList.vue'
 import ElementTree from '@/components/sidebar/ElementTree.vue'
+import { isEmbedded } from '@/embed/mode'
+import { t } from '@/i18n'
+import { embedInitialized, startEmbedBridge } from '@/embed/bridge'
 
 const project = useProjectStore()
 const history = useHistoryStore()
@@ -27,6 +30,21 @@ function togglePanel(name: string) {
 
 useKeyboardShortcuts()
 
+// A host may load the iframe hidden (e.g. in a collapsed section); layout needs real dimensions.
+function whenVisible(callback: () => void) {
+  const hasSize = () => window.innerWidth > 0 && window.innerHeight > 0
+  if (hasSize()) {
+    setTimeout(callback, 50)
+    return
+  }
+  const onResize = () => {
+    if (!hasSize()) return
+    window.removeEventListener('resize', onResize)
+    setTimeout(callback, 50)
+  }
+  window.addEventListener('resize', onResize)
+}
+
 watch(
   () => project.activeProjectId,
   async () => {
@@ -37,8 +55,23 @@ watch(
 
 onMounted(async () => {
   await history.init()
-  project.loadFromLocalStorage()
   theme.updateStudioCssVariables()
+
+  if (isEmbedded) {
+    // The host owns the widgets; wait for it instead of loading local projects.
+    startEmbedBridge({
+      onWidgetsLoaded: async () => {
+        await nextTick()
+        whenVisible(() => {
+          canvasRef.value?.autoLayout()
+          history.clear()
+        })
+      },
+    })
+    return
+  }
+
+  project.loadFromLocalStorage()
   setInterval(() => project.saveToLocalStorage(), 30_000)
 })
 </script>
@@ -60,7 +93,7 @@ onMounted(async () => {
     <!-- Floating panels (left side, triggered by canvas tools) -->
     <FloatingPanel
       :visible="activePanel === 'widgets'"
-      title="Widgets"
+      :title="t('canvasTools.widgets')"
       position="right-toolbar"
       @close="activePanel = null"
     >
@@ -69,7 +102,7 @@ onMounted(async () => {
 
     <FloatingPanel
       :visible="activePanel === 'elements'"
-      title="Elements"
+      :title="t('canvasTools.elements')"
       position="right-toolbar"
       @close="activePanel = null"
     >
@@ -91,8 +124,10 @@ onMounted(async () => {
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <path d="M4 5h8M4 8h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
-      Agent log
+      {{ t('app.agentLog') }}
     </button>
+
+    <div v-if="isEmbedded && !embedInitialized" class="studio__loading">{{ t('app.loading') }}</div>
   </div>
 </template>
 
@@ -135,5 +170,17 @@ onMounted(async () => {
   svg {
     flex-shrink: 0;
   }
+}
+
+.studio__loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--studio-canvas-bg);
+  color: var(--studio-text-secondary);
+  font-size: 13px;
+  z-index: 1000;
 }
 </style>

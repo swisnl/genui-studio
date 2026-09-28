@@ -6,6 +6,8 @@ import { useThemeStore } from '@/stores/theme'
 import { useCanvasStore } from '@/stores/canvas'
 import { pickWidgetFile } from '@/services/widgetImport'
 import ConfirmDialog from '@/components/panels/ConfirmDialog.vue'
+import { isEmbedded } from '@/embed/mode'
+import { LOCALES, locale, setLocale, t } from '@/i18n'
 
 const project = useProjectStore()
 const history = useHistoryStore()
@@ -23,11 +25,10 @@ const pendingDeleteProject = ref<{ id: string; name: string; isLast: boolean } |
 
 const deleteProjectDescription = computed(() => {
   if (!pendingDeleteProject.value) return ''
-  if (pendingDeleteProject.value.isLast) {
-    return `"${pendingDeleteProject.value.name}" will be deleted and immediately replaced with a new empty project.`
-  }
-
-  return `"${pendingDeleteProject.value.name}" will be removed from this browser. This action cannot be undone.`
+  const name = pendingDeleteProject.value.name
+  return pendingDeleteProject.value.isLast
+    ? t('topBar.deleteDialog.descriptionLast', { name })
+    : t('topBar.deleteDialog.description', { name })
 })
 
 watch(
@@ -44,6 +45,11 @@ async function onImport() {
   if (data) {
     canvas.addWidget(data.name, data.template, undefined, undefined, data.templateSource, data.schema, data.previewData)
   }
+}
+
+function toggleLocale() {
+  const index = LOCALES.findIndex((l) => l.id === locale.value)
+  setLocale(LOCALES[(index + 1) % LOCALES.length].id)
 }
 
 function toggleTheme() {
@@ -146,8 +152,9 @@ onBeforeUnmount(() => {
 <template>
   <div class="top-bar">
     <div class="top-bar__left">
-      <div class="top-bar__projects">
-        <button ref="menuButtonRef" class="top-bar__menu" title="Projects" @click="toggleProjectMenu">
+      <span v-if="isEmbedded" class="top-bar__name top-bar__name--static">{{ project.name }}</span>
+      <div v-if="!isEmbedded" class="top-bar__projects">
+        <button ref="menuButtonRef" class="top-bar__menu" :title="t('topBar.projects')" @click="toggleProjectMenu">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <path d="M3 5h12M3 9h12M3 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
@@ -155,8 +162,8 @@ onBeforeUnmount(() => {
 
         <div v-if="isProjectMenuOpen" ref="menuPanelRef" class="top-bar__menu-panel">
           <div class="top-bar__menu-header">
-            <span class="top-bar__menu-title">Projects</span>
-            <button class="top-bar__menu-create" @click="onCreateProject">New project</button>
+            <span class="top-bar__menu-title">{{ t('topBar.projects') }}</span>
+            <button class="top-bar__menu-create" @click="onCreateProject">{{ t('topBar.newProject') }}</button>
           </div>
 
           <div class="top-bar__menu-list">
@@ -171,11 +178,11 @@ onBeforeUnmount(() => {
                 @click="onSelectProject(item.id)"
               >
                 <span class="top-bar__project-item-name">{{ item.name }}</span>
-                <span v-if="item.id === project.activeProjectId" class="top-bar__project-item-badge">Current</span>
+                <span v-if="item.id === project.activeProjectId" class="top-bar__project-item-badge">{{ t('topBar.currentProject') }}</span>
               </button>
               <button
                 class="top-bar__project-delete"
-                :title="`Delete ${item.name}`"
+                :title="t('topBar.deleteProject', { name: item.name })"
                 @click.stop="onDeleteProject(item.id, item.name)"
               >
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -190,6 +197,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
+      <template v-if="!isEmbedded">
       <input
         v-if="isEditingProjectName"
         ref="projectNameInputRef"
@@ -201,16 +209,17 @@ onBeforeUnmount(() => {
         @keydown.enter.prevent="commitProjectNameEdit"
         @keydown.escape.prevent="cancelProjectNameEdit"
       >
-      <button v-else class="top-bar__name" title="Rename project" @click="startProjectNameEdit">{{ project.name }}</button>
+      <button v-else class="top-bar__name" :title="t('topBar.renameProject')" @click="startProjectNameEdit">{{ project.name }}</button>
+      </template>
     </div>
     <div class="top-bar__right">
-      <button class="top-bar__btn" :disabled="!history.canUndo" data-tooltip="Undo (Cmd+Z)" data-tooltip-pos="bottom" @click="history.undo()">
+      <button class="top-bar__btn" :disabled="!history.canUndo" :data-tooltip="t('topBar.undo')" data-tooltip-pos="bottom" @click="history.undo()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
           <path d="M3 8h8a3 3 0 0 1 0 6H8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M6 5L3 8l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
-      <button class="top-bar__btn" :disabled="!history.canRedo" data-tooltip="Redo (Cmd+Shift+Z)" data-tooltip-pos="bottom" @click="history.redo()">
+      <button class="top-bar__btn" :disabled="!history.canRedo" :data-tooltip="t('topBar.redo')" data-tooltip-pos="bottom" @click="history.redo()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
           <path d="M13 8H5a3 3 0 0 0 0 6h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M10 5l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -219,7 +228,7 @@ onBeforeUnmount(() => {
       <button
         class="top-bar__btn"
         :disabled="canvas.widgets.length === 0"
-        data-tooltip="Auto layout"
+        :data-tooltip="t('topBar.autoLayout')"
         data-tooltip-pos="bottom"
         @click="emit('autoLayout')"
       >
@@ -231,8 +240,9 @@ onBeforeUnmount(() => {
         </svg>
       </button>
       <button
+        v-if="!theme.colorSchemeLocked"
         class="top-bar__btn"
-        :data-tooltip="theme.activePreset === 'dark' ? 'Light mode' : 'Dark mode'"
+        :data-tooltip="theme.activePreset === 'dark' ? t('topBar.lightMode') : t('topBar.darkMode')"
         data-tooltip-pos="bottom"
         @click="toggleTheme"
       >
@@ -244,27 +254,36 @@ onBeforeUnmount(() => {
           <path d="M13.5 9.5a5.5 5.5 0 0 1-7-7 5.5 5.5 0 1 0 7 7z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
-      <button class="top-bar__btn" data-tooltip="Import widget" data-tooltip-pos="bottom" @click="onImport">
+      <button
+        v-if="!isEmbedded"
+        class="top-bar__btn top-bar__btn--locale"
+        :data-tooltip="t('topBar.language')"
+        data-tooltip-pos="bottom"
+        @click="toggleLocale"
+      >
+        {{ locale.toUpperCase() }}
+      </button>
+      <button class="top-bar__btn" :data-tooltip="t('topBar.importWidget')" data-tooltip-pos="bottom" @click="onImport">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
           <path d="M8 3v7M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M3 12h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
         </svg>
       </button>
-      <button class="top-bar__export" @click="onExport">
+      <button v-if="!isEmbedded" class="top-bar__export" @click="onExport">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
           <rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.3"/>
           <path d="M4 7h6M7 4v6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
         </svg>
-        Exporteren
+        {{ t('topBar.export') }}
       </button>
     </div>
   </div>
   <ConfirmDialog
     :visible="!!pendingDeleteProject"
-    title="Delete project?"
+    :title="t('topBar.deleteDialog.title')"
     :description="deleteProjectDescription"
-    confirm-label="Delete project"
-    cancel-label="Keep project"
+    :confirm-label="t('topBar.deleteDialog.confirm')"
+    :cancel-label="t('topBar.deleteDialog.cancel')"
     tone="danger"
     @close="closeDeleteProjectDialog"
     @confirm="confirmDeleteProject"
@@ -338,6 +357,12 @@ onBeforeUnmount(() => {
     white-space: nowrap;
     text-align: left;
     cursor: pointer;
+  }
+
+  span.top-bar__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   input.top-bar__name {
@@ -507,6 +532,13 @@ onBeforeUnmount(() => {
     &:disabled {
       opacity: 0.3;
       cursor: not-allowed;
+    }
+
+    &--locale {
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
     }
   }
 

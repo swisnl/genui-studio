@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Embed Host Harness</title>
+  <style>
+    body { margin: 0; display: flex; height: 100vh; font: 13px/1.4 system-ui, sans-serif; background: #f4f4f5; color: #18181b; }
+    aside { width: 340px; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-right: 1px solid #d4d4d8; box-sizing: border-box; }
+    aside h1 { font-size: 15px; margin: 0 0 4px; }
+    aside button { padding: 6px 10px; text-align: left; cursor: pointer; }
+    #log { flex: 1; overflow: auto; margin: 0; padding: 8px; background: #18181b; color: #e4e4e7; font: 11px/1.4 ui-monospace, monospace; white-space: pre-wrap; }
+    iframe { flex: 1; border: 0; }
+  </style>
+</head>
+<body>
+  <aside>
+    <h1>GenUI Studio embed harness</h1>
+    <button id="get">getWidgets()</button>
+    <button id="drop-first">setWidgets() without the first widget</button>
+    <button id="break-token">updateConfig() with a wrong CSRF token</button>
+    <button id="fix-token">updateConfig() with the right CSRF token</button>
+    <button id="scheme">Toggle host light/dark mode</button>
+    <button id="locale">Toggle locale (en/nl)</button>
+    <button id="theme-card">Toggle theme card</button>
+    <pre id="log"></pre>
+  </aside>
+  <iframe id="studio" title="GenUI Studio"></iframe>
+
+  <script type="module">
+    import { createStudioEmbed } from '/src/embed/client.ts'
+
+    // `?studio=<origin>` loads the studio from another origin, to check that it ignores this page.
+    const studioOrigin = new URLSearchParams(location.search).get('studio') ?? location.origin
+    const logEl = document.getElementById('log')
+    const log = (label, data) => {
+      logEl.textContent = `${new Date().toLocaleTimeString()} ${label}\n${data === undefined ? '' : JSON.stringify(data, null, 2) + '\n'}\n` + logEl.textContent
+    }
+
+    function encode(value) {
+      const bytes = new TextEncoder().encode(JSON.stringify(value))
+      return btoa(String.fromCodePoint(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    }
+
+    function definition(name, view, defaultState, jsonSchema) {
+      return {
+        version: '1.0',
+        name,
+        encodedWidget: encode({ id: name, name, view, defaultState, states: [] }),
+        template: '',
+        outputJsonPreview: null,
+        jsonSchema,
+      }
+    }
+
+    // Shaped like the rows a host such as Vragen stores.
+    let widgets = [
+      {
+        externalId: '101',
+        meta: { trigger_handle: 'show-profile', description: 'Shows a profile' },
+        definition: definition(
+          'Profile',
+          '<Card size="sm">\n  <Col gap={2}>\n    <Title value={name} size="lg" />\n    <Text value={role} size="sm" color="secondary" />\n  </Col>\n</Card>',
+          { name: 'Ada Lovelace', role: 'Analyst' },
+          { type: 'object', properties: { name: { type: 'string' }, role: { type: 'string' } } },
+        ),
+      },
+      {
+        externalId: '102',
+        meta: { trigger_handle: 'show-notice', description: 'Shows a notice' },
+        definition: definition(
+          'Notice',
+          '<Card size="sm">\n  <Text value={message} />\n</Card>',
+          { message: 'Loaded from the host' },
+          { type: 'object', properties: { message: { type: 'string' } } },
+        ),
+      },
+    ]
+
+    const config = (token) => ({
+      title: 'Agent: Harness',
+      providers: { openai: { baseURL: '/__mock-llm/v1', headers: { 'X-CSRF-TOKEN': token } } },
+      models: [
+        { id: 'litellm-gpt-56-luna-eu', label: 'GPT 5.6 Luna (EU)', family: 'openai', group: 'Vragen' },
+        { id: 'litellm-gpt-41-eu', label: 'GPT 4.1 (EU)', family: 'openai', group: 'Vragen' },
+      ],
+      defaultModel: 'litellm-gpt-56-luna-eu',
+    })
+
+    // Host UI state that the studio follows
+    let colorScheme = 'dark'
+    let locale = 'nl'
+    let themeCard = false
+
+    const iframe = document.getElementById('studio')
+    iframe.src = `${studioOrigin}/?embed=1&parentOrigin=${encodeURIComponent(location.origin)}`
+
+    const studio = createStudioEmbed({
+      iframe,
+      origin: studioOrigin,
+      config: { ...config('test-token'), colorScheme, locale, themeCard },
+      widgets,
+      onReady: () => log('ready'),
+      onChange: (next) => { widgets = next; log('change', next.map(summary)) },
+      onError: (error) => log('error', error),
+    })
+    window.studio = studio
+
+    function summary(w) {
+      return { externalId: w.externalId, studioId: w.studioId, name: w.definition.name, meta: w.meta, template: w.definition.template.slice(0, 60) }
+    }
+
+    document.getElementById('get').onclick = async () => log('getWidgets', (await studio.getWidgets()).map(summary))
+    document.getElementById('drop-first').onclick = () => {
+      widgets = widgets.slice(1)
+      studio.setWidgets(widgets)
+      log('setWidgets', widgets.map(summary))
+    }
+    document.getElementById('break-token').onclick = () => { studio.updateConfig(config('wrong-token')); log('updateConfig (wrong token)') }
+    document.getElementById('scheme').onclick = () => {
+      colorScheme = colorScheme === 'dark' ? 'light' : 'dark'
+      studio.updateConfig({ colorScheme })
+      log(`updateConfig (colorScheme: ${colorScheme})`)
+    }
+    document.getElementById('locale').onclick = () => {
+      locale = locale === 'nl' ? 'en' : 'nl'
+      studio.updateConfig({ locale })
+      log(`updateConfig (locale: ${locale})`)
+    }
+    document.getElementById('theme-card').onclick = () => {
+      themeCard = !themeCard
+      studio.updateConfig({ themeCard })
+      log(`updateConfig (themeCard: ${themeCard})`)
+    }
+    document.getElementById('fix-token').onclick = () => { studio.updateConfig(config('test-token')); log('updateConfig (right token)') }
+  </script>
+</body>
+</html>

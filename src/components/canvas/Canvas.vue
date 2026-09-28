@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useCanvasStore } from '@/stores/canvas'
 import { useSelectionStore } from '@/stores/selection'
@@ -191,7 +192,7 @@ function autoLayout() {
 
   // Measure ThemeCard if visible
   let themeCardSize: { width: number; height: number } | null = null
-  if (theme.themeCardVisible) {
+  if (theme.themeCardEnabled && theme.themeCardVisible) {
     const themeEl = containerEl.value?.querySelector<HTMLElement>('.theme-card')
     if (themeEl) {
       themeCardSize = { width: themeEl.offsetWidth, height: themeEl.offsetHeight }
@@ -326,7 +327,7 @@ onUnmounted(() => {
     />
     <div class="canvas-layer" :style="transformStyle">
       <ThemeCard
-        v-if="theme.themeCardVisible"
+        v-if="theme.themeCardEnabled && theme.themeCardVisible"
         :scale="canvas.viewport.scale"
         @pointerdown.left.stop="onThemeCardDragStart"
       />
@@ -354,7 +355,7 @@ onUnmounted(() => {
         <path d="M8 3v7M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M3 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
-      <span>Drop to import</span>
+      <span>{{ t('canvas.dropToImport') }}</span>
     </div>
   </div>
 </template>

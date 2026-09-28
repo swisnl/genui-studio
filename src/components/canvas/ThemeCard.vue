@@ -21,6 +21,7 @@ import type { BaseColors } from '@/utils/deriveTheme'
 import { deriveThemeTokens } from '@/utils/deriveTheme'
 import { generatePaletteScale } from '@/utils/color'
 import SemanticAccentsPopover from './SemanticAccentsPopover.vue'
+import { t, type MessageKey } from '@/i18n'
 
 const props = defineProps<{
   scale: number
@@ -30,16 +31,16 @@ const theme = useThemeStore()
 const previewEl = ref<HTMLElement | null>(null)
 const colorInputRefs = ref<Record<string, HTMLInputElement | null>>({})
 const showAccentsPopover = ref(false)
-const localPreset = ref<'light' | 'dark'>('dark')
+const localPreset = ref<'light' | 'dark'>(theme.activePreset)
 
 const PALETTE_STEPS: PaletteStep[] = ['5', '10', '20', '30', '40', '50', '60', '70', '80', '90']
 
 type CorePaletteKey = 'primary' | 'surface' | 'border'
 
-const corePaletteGroups: { key: CorePaletteKey; label: string }[] = [
-  { key: 'primary', label: 'Primary' },
-  { key: 'surface', label: 'Surfaces' },
-  { key: 'border', label: 'Borders' },
+const corePaletteGroups: { key: CorePaletteKey; label: MessageKey }[] = [
+  { key: 'primary', label: 'themeCard.primary' },
+  { key: 'surface', label: 'themeCard.surfaces' },
+  { key: 'border', label: 'themeCard.borders' },
 ]
 
 const semanticDotKeys = ['info', 'success', 'warning', 'caution', 'danger', 'discovery'] as const
@@ -109,19 +110,19 @@ function formatHex(hex: string): string {
         <circle cx="11" cy="5" r="3.5" stroke="currentColor" stroke-width="1.2" />
         <circle cx="8" cy="10.5" r="3.5" stroke="currentColor" stroke-width="1.2" />
       </svg>
-      <span class="theme-card__title">Theme</span>
+      <span class="theme-card__title">{{ t('themeCard.title') }}</span>
 
       <div class="theme-card__presets">
         <button
           class="theme-card__preset"
           :class="{ 'theme-card__preset--active': localPreset === 'light' }"
           @click.stop="localPreset = 'light'"
-        >Light</button>
+        >{{ t('themeCard.light') }}</button>
         <button
           class="theme-card__preset"
           :class="{ 'theme-card__preset--active': localPreset === 'dark' }"
           @click.stop="localPreset = 'dark'"
-        >Dark</button>
+        >{{ t('themeCard.dark') }}</button>
       </div>
     </div>
 
@@ -135,7 +136,7 @@ function formatHex(hex: string): string {
             class="theme-card__color-group"
           >
             <div class="theme-card__color-header">
-              <span class="theme-card__color-label">{{ group.label }}</span>
+              <span class="theme-card__color-label">{{ t(group.label) }}</span>
               <input
                 class="theme-card__hex-input"
                 :value="formatHex(localBaseColors[group.key])"
@@ -180,7 +181,7 @@ function formatHex(hex: string): string {
               :style="{ background: localBaseColors[key] }"
             />
           </span>
-          <span>Semantic accents</span>
+          <span>{{ t('themeCard.semanticAccents') }}</span>
           <svg
             class="theme-card__accents-chevron"
             :class="{ 'theme-card__accents-chevron--open': showAccentsPopover }"

@@ -3,9 +3,10 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { DynamicWidget, applyTheme, type ThemeConfig } from '@swis/genui-widgets'
 import { useSelectionStore } from '@/stores/selection'
 import type { CanvasWidget } from '@/types/canvas'
-import { compileJsx } from '@/services/jsx-compiler'
+import { serializeWidgetFile } from '@/services/widgetExport'
 import ElementHighlight from './ElementHighlight.vue'
 import WidgetEditor from './WidgetEditor.vue'
+import { t } from '@/i18n'
 
 const props = defineProps<{
   widget: CanvasWidget
@@ -54,34 +55,7 @@ function openTemplateViewer(e: MouseEvent) {
 function downloadWidget(e: MouseEvent) {
   e.stopPropagation()
 
-  // Encode the view + defaultState into URL-safe base64
-  const payload = JSON.stringify({
-    id: props.widget.id,
-    name: props.widget.name,
-    view: props.widget.templateSource ?? '',
-    defaultState: props.widget.previewData ?? {},
-    states: [],
-  })
-  const bytes = new TextEncoder().encode(payload)
-  const b64 = btoa(String.fromCodePoint(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-
-  // Compile JSX → nunjucks template
-  let nunjucksTemplate = ''
-  try {
-    nunjucksTemplate = compileJsx(props.widget.templateSource ?? '')
-  } catch {
-    // If compilation fails, leave empty
-  }
-
-  const widgetFile = {
-    version: '1.0',
-    name: props.widget.name,
-    encodedWidget: b64,
-    template: nunjucksTemplate,
-    outputJsonPreview: props.widget.template,
-    jsonSchema: props.widget.schema ?? {},
-  }
-
+  const widgetFile = serializeWidgetFile(props.widget)
   const blob = new Blob([JSON.stringify(widgetFile, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -114,7 +88,7 @@ function downloadWidget(e: MouseEvent) {
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
           <path d="M4 2L1 6l3 4M8 2l3 4-3 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <span class="canvas-widget__tooltip">Edit</span>
+        <span class="canvas-widget__tooltip">{{ t('canvasWidget.edit') }}</span>
       </button>
       <button
         class="canvas-widget__label-btn"
@@ -124,7 +98,7 @@ function downloadWidget(e: MouseEvent) {
           <path d="M6 2v6M3.5 6L6 8.5 8.5 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M2 9.5h8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
         </svg>
-        <span class="canvas-widget__tooltip">Download .widget</span>
+        <span class="canvas-widget__tooltip">{{ t('canvasWidget.download') }}</span>
       </button>
     </div>
 

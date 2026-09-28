@@ -33,7 +33,17 @@ function decodeUrlSafeBase64(encoded: string): string {
  */
 export function parseWidgetFile(json: string): WidgetFileData | null {
   try {
-    const data = JSON.parse(json)
+    return parseWidgetDefinition(JSON.parse(json))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Parse an already-decoded .widget definition object.
+ */
+export function parseWidgetDefinition(data: Record<string, any>): WidgetFileData | null {
+  try {
     const name = data.name ?? 'Imported Widget'
 
     // Try to extract from encodedWidget (preferred)

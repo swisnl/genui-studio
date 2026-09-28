@@ -13,6 +13,9 @@ import type { BaseColors } from '@/utils/deriveTheme'
 import type { ThemePreset } from '@/stores/theme'
 import type { AgentImage, AgentMessage } from '@/stores/agent'
 import { imageToDataUrl } from '@/utils/image'
+import { locale, type Locale } from '@/i18n'
+
+const LANGUAGE_NAMES: Record<Locale, string> = { en: 'English', nl: 'Dutch' }
 
 const THEME_COLOR_KEYS: (keyof BaseColors)[] = [
   'primary',
@@ -176,7 +179,7 @@ function handleToolCall(name: string, input: Record<string, unknown>): string {
   const theme = useThemeStore()
   const agent = useAgentStore()
 
-  agent.setThinkingPhase('Applying changes')
+  agent.setThinkingPhase('applying')
 
   switch (name) {
     case 'create_widget': {
@@ -258,9 +261,16 @@ async function sendMessageAnthropic(
   apiMessages: Anthropic.MessageParam[],
   systemPrompt: string,
 ) {
-  const client = new Anthropic({ apiKey: agent.apiKey, dangerouslyAllowBrowser: true })
+  const provider = agent.providers.anthropic
+  const client = new Anthropic({
+    // A host proxy authenticates the request itself; the SDK still requires a key.
+    apiKey: provider?.apiKey ?? (agent.apiKey || 'proxy'),
+    baseURL: provider?.baseURL,
+    defaultHeaders: provider?.headers,
+    dangerouslyAllowBrowser: true,
+  })
 
-  agent.setThinkingPhase('Generating')
+  agent.setThinkingPhase('generating')
 
   let response = await client.messages.create({
     model: agent.selectedModel,
@@ -279,7 +289,7 @@ async function sendMessageAnthropic(
         textContent += block.text
         agent.streamingContent = textContent
       } else if (block.type === 'tool_use') {
-        agent.setThinkingPhase('Validating')
+        agent.setThinkingPhase('validating')
         const result = handleToolCall(block.name, block.input as Record<string, unknown>)
         toolCallsLog.push({ name: block.name, input: block.input as Record<string, unknown> })
 
@@ -290,13 +300,13 @@ async function sendMessageAnthropic(
         })
 
         if (result.startsWith('VALIDATION_ERROR:')) {
-          agent.setThinkingPhase('Retrying (invalid template)')
+          agent.setThinkingPhase('retrying')
         }
       }
     }
 
     if (response.stop_reason === 'tool_use') {
-      agent.setThinkingPhase('Generating')
+      agent.setThinkingPhase('generating')
       response = await client.messages.create({
         model: agent.selectedModel,
         max_tokens: 4096,
@@ -317,9 +327,16 @@ async function sendMessageOpenAI(
   input: OpenAI.Responses.ResponseInputItem[],
   systemPrompt: string,
 ) {
-  const client = new OpenAI({ apiKey: agent.openaiApiKey, dangerouslyAllowBrowser: true })
+  const provider = agent.providers.openai
+  const client = new OpenAI({
+    // A host proxy authenticates the request itself; the SDK still requires a key.
+    apiKey: provider?.apiKey ?? (agent.openaiApiKey || 'proxy'),
+    baseURL: provider?.baseURL,
+    defaultHeaders: provider?.headers,
+    dangerouslyAllowBrowser: true,
+  })
 
-  agent.setThinkingPhase('Generating')
+  agent.setThinkingPhase('generating')
 
   const createResponse = () =>
     client.responses.create({
@@ -358,7 +375,7 @@ async function sendMessageOpenAI(
       break
     }
 
-    agent.setThinkingPhase('Validating')
+    agent.setThinkingPhase('validating')
 
     // Replay every output item — reasoning items included — before the outputs.
     input.push(...response.output)
@@ -375,11 +392,11 @@ async function sendMessageOpenAI(
       })
 
       if (result.startsWith('VALIDATION_ERROR:')) {
-        agent.setThinkingPhase('Retrying (invalid template)')
+        agent.setThinkingPhase('retrying')
       }
     }
 
-    agent.setThinkingPhase('Generating')
+    agent.setThinkingPhase('generating')
     response = await createResponse()
   }
 
@@ -431,7 +448,7 @@ export async function sendMessage(userText: string, images: AgentImage[] = []) {
   agent.setError(null)
   const userMessage = agent.addUserMessage(userText, images)
   agent.setStreaming(true)
-  agent.setThinkingPhase('Thinking')
+  agent.setThinkingPhase('thinking')
 
   // Build context
   const selectedWidgets = selection.selectedWidgets
@@ -445,7 +462,7 @@ export async function sendMessage(userText: string, images: AgentImage[] = []) {
     activePreset: theme.activePreset,
     lightColors: theme.lightColors,
     darkColors: theme.darkColors,
-  })
+  }) + `\n\n## Language\nThe studio's interface is in ${LANGUAGE_NAMES[locale.value]}. Write your chat replies in the language the user writes in, or in ${LANGUAGE_NAMES[locale.value]} if that is unclear. This applies to your replies only; widget content follows the user's request.`
 
   // The latest user turn carries the full context; earlier turns are replayed as-is.
   const textFor = (m: AgentMessage) => (m.id === userMessage.id ? fullUserMessage : m.content)
@@ -468,7 +485,9 @@ export async function sendMessage(userText: string, images: AgentImage[] = []) {
   } catch (err) {
     history.endBatch()
     const msg = err instanceof Error ? err.message : 'Unknown error'
-    agent.setError(msg)
+    // Both SDKs expose the HTTP status on their API errors.
+    const status = typeof (err as { status?: unknown })?.status === 'number' ? (err as { status: number }).status : null
+    agent.setError(msg, status)
   } finally {
     agent.setStreaming(false)
   }

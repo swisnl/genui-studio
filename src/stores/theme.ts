@@ -97,6 +97,10 @@ export const useThemeStore = defineStore('theme', () => {
   // Theme card canvas state
   const themeCardPosition = ref<Position>({ x: 40, y: 40 })
   const themeCardVisible = ref(true)
+  /** False when a host disables the theme card entirely */
+  const themeCardEnabled = ref(true)
+  /** True when a host controls light/dark mode; the studio's own switches are then ignored */
+  const colorSchemeLocked = ref(false)
 
   const tokenEntries = computed(() => Object.entries(tokens.value) as [keyof ThemeConfig, string | number | object][])
 
@@ -214,7 +218,15 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   function applyPreset(preset: ThemePreset) {
+    if (colorSchemeLocked.value) return
     // Switching is not undoable — it just picks which theme is active
+    activePreset.value = preset
+    updateStudioCssVariables()
+  }
+
+  /** Follow the host's light/dark mode from now on. */
+  function setHostColorScheme(preset: ThemePreset) {
+    colorSchemeLocked.value = true
     activePreset.value = preset
     updateStudioCssVariables()
   }
@@ -250,11 +262,14 @@ export const useThemeStore = defineStore('theme', () => {
     borderColors,
     themeCardPosition,
     themeCardVisible,
+    themeCardEnabled,
+    colorSchemeLocked,
     tokenEntries,
     colorTokenGroups,
     setBaseColor,
     setBaseColors,
     applyPreset,
+    setHostColorScheme,
     updateStudioCssVariables,
     setThemeCardPosition,
     exportAsJSON,

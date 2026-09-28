@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useThemeStore } from '@/stores/theme'
 import type { PaletteScale, PaletteStep } from '@swis/genui-widgets'
 import type { BaseColors } from '@/utils/deriveTheme'
+import { t, type MessageKey } from '@/i18n'
 
 defineProps<{
   visible: boolean
@@ -20,18 +21,18 @@ type SemanticKey = 'info' | 'success' | 'warning' | 'caution' | 'danger' | 'disc
 
 const semanticOrder: SemanticKey[] = ['info', 'success', 'warning', 'caution', 'danger', 'discovery']
 
-const semanticLabels: Record<SemanticKey, string> = {
-  info: 'Info',
-  success: 'Success',
-  warning: 'Warning',
-  caution: 'Caution',
-  danger: 'Danger',
-  discovery: 'Discovery',
+const semanticLabels: Record<SemanticKey, MessageKey> = {
+  info: 'themeCard.info',
+  success: 'themeCard.success',
+  warning: 'themeCard.warning',
+  caution: 'themeCard.caution',
+  danger: 'themeCard.danger',
+  discovery: 'themeCard.discovery',
 }
 
 const activeKey = ref<SemanticKey>('info')
 
-const activeLabel = computed(() => semanticLabels[activeKey.value])
+const activeLabel = computed(() => t(semanticLabels[activeKey.value]))
 
 function getPaletteSteps(key: SemanticKey): string[] {
   const scale = theme.palettes[key]
@@ -87,8 +88,8 @@ onBeforeUnmount(() => {
   <Transition name="accents-popover">
     <div v-if="visible" ref="popoverEl" class="semantic-popover" @mousedown.stop>
       <div class="semantic-popover__header">
-        <span class="semantic-popover__title">Semantic accents</span>
-        <span class="semantic-popover__caption">Status and supporting palettes</span>
+        <span class="semantic-popover__title">{{ t('themeCard.semanticAccents') }}</span>
+        <span class="semantic-popover__caption">{{ t('themeCard.semanticCaption') }}</span>
       </div>
 
       <div class="semantic-popover__chips">

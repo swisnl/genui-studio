@@ -19,6 +19,7 @@ Key features:
 - **Live preview** — See widgets render with dynamic template data in real time
 - **Theme system** — Full light/dark mode with customizable color palettes
 - **Multi-project** — Create and switch between multiple projects
+- **Multilingual** — English and Dutch interface
 - **Undo/redo** — Full history with keyboard shortcuts
 
 ## Quick start
@@ -42,7 +43,7 @@ PORT=3000 npx @swis/genui-studio
 - Node.js 18+
 - An [Anthropic API key](https://console.anthropic.com/) and/or [OpenAI API key](https://platform.openai.com/)
 
-API keys can be entered directly in the app's settings UI.
+API keys can be entered directly in the app's prompt bar.
 
 ## Development
 
@@ -52,13 +53,6 @@ If you want to contribute or run from source:
 git clone https://github.com/swisnl/genui-studio.git
 cd genui-studio
 npm install
-```
-
-Optionally create a `.env` file in the project root:
-
-```env
-VITE_ANTHROPIC_API_KEY=your_anthropic_key_here
-VITE_OPENAI_API_KEY=your_openai_key_here
 ```
 
 ```bash

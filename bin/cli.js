@@ -32,6 +32,8 @@ const port = parseInt(process.env.PORT || '4277', 10);
 
 const server = createServer(async (req, res) => {
   let pathname = new URL(req.url, `http://localhost:${port}`).pathname;
+  // Keep old /genui-studio/ links working now that the build uses relative paths.
+  pathname = pathname.replace(/^\/genui-studio(?=\/|$)/, '') || '/';
 
   let filePath = join(distDir, pathname);
 
@@ -59,5 +61,5 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(port, () => {
-  console.log(`🚀 genui-studio is running at http://localhost:${port}/genui-studio/`);
+  console.log(`🚀 genui-studio is running at http://localhost:${port}/`);
 });

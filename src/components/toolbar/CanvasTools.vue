@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useCanvasStore } from '@/stores/canvas'
 import { useThemeStore } from '@/stores/theme'
+import { t } from '@/i18n'
 
 const props = defineProps<{
   activePanel: string | null
@@ -20,9 +21,9 @@ function toggleThemeCard() {
 }
 
 const tools = [
-  { id: 'select', icon: 'cursor', title: 'Select' },
-  { id: 'widgets', icon: 'grid', title: 'Widgets' },
-  { id: 'elements', icon: 'layers', title: 'Elements' },
+  { id: 'select', icon: 'cursor', title: 'canvasTools.select' },
+  { id: 'widgets', icon: 'grid', title: 'canvasTools.widgets' },
+  { id: 'elements', icon: 'layers', title: 'canvasTools.elements' },
 ] as const
 
 function zoomIn() {
@@ -46,7 +47,7 @@ function resetZoom() {
         :key="tool.id"
         class="canvas-tools__btn"
         :class="{ 'canvas-tools__btn--active': activePanel === tool.id }"
-        :data-tooltip="tool.title"
+        :data-tooltip="t(tool.title)"
         data-tooltip-pos="left"
         @click="emit('togglePanel', tool.id)"
       >
@@ -68,9 +69,10 @@ function resetZoom() {
         </svg>
       </button>
       <button
+        v-if="themeStore.themeCardEnabled"
         class="canvas-tools__btn"
         :class="{ 'canvas-tools__btn--active': themeStore.themeCardVisible }"
-        data-tooltip="Theme Card"
+        :data-tooltip="t('canvasTools.themeCard')"
         data-tooltip-pos="left"
         @click="toggleThemeCard"
       >
@@ -83,13 +85,13 @@ function resetZoom() {
     </div>
 
     <div class="canvas-tools__zoom">
-      <button class="canvas-tools__zoom-btn" data-tooltip="Zoom out" data-tooltip-pos="left" @click="zoomOut">
+      <button class="canvas-tools__zoom-btn" :data-tooltip="t('canvasTools.zoomOut')" data-tooltip-pos="left" @click="zoomOut">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
           <path d="M3 7h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
         </svg>
       </button>
-      <span class="canvas-tools__zoom-pct" title="Reset zoom to 100%" @click="resetZoom">{{ zoomPercent }}%</span>
-      <button class="canvas-tools__zoom-btn" data-tooltip="Zoom in" data-tooltip-pos="left" @click="zoomIn">
+      <span class="canvas-tools__zoom-pct" :title="t('canvasTools.resetZoom')" @click="resetZoom">{{ zoomPercent }}%</span>
+      <button class="canvas-tools__zoom-btn" :data-tooltip="t('canvasTools.zoomIn')" data-tooltip-pos="left" @click="zoomIn">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
           <path d="M3 7h8M7 3v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
         </svg>

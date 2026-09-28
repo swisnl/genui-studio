@@ -8,7 +8,7 @@ import { useHistoryStore } from './history'
 
 let _widgetCounter = 0
 
-function generateId(): string {
+export function generateId(): string {
   return `w_${Date.now()}_${++_widgetCounter}`
 }
 
@@ -221,6 +221,8 @@ export const useCanvasStore = defineStore('canvas', () => {
   }
 
   function fitToScreen(containerWidth: number, containerHeight: number) {
+    // A hidden container would collapse the scale to zero
+    if (containerWidth <= 0 || containerHeight <= 0) return
     if (widgets.value.length === 0) {
       viewport.value = { x: 0, y: 0, scale: 1 }
       return

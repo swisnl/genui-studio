@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useCanvasStore } from '@/stores/canvas'
 import { useSelectionStore } from '@/stores/selection'
+import { t } from '@/i18n'
 
 const canvas = useCanvasStore()
 const selection = useSelectionStore()
@@ -10,11 +11,11 @@ function onSelect(id: string, e: MouseEvent) {
 }
 
 function addNewWidget() {
-  canvas.addWidget('New Widget', {
+  canvas.addWidget(t('widgetList.newName'), {
     type: 'Card',
     children: [
-      { type: 'Title', value: 'New Widget' },
-      { type: 'Text', value: 'Click to edit or ask Claude to modify this widget.' },
+      { type: 'Title', value: t('widgetList.newName') },
+      { type: 'Text', value: t('widgetList.newText') },
     ],
   })
 }
@@ -23,7 +24,7 @@ function addNewWidget() {
 <template>
   <div class="widget-list">
     <div class="widget-list__header">
-      <span class="widget-list__title">Widgets</span>
+      <span class="widget-list__title">{{ t('widgetList.title') }}</span>
     </div>
     <div class="widget-list__items">
       <div
@@ -37,10 +38,10 @@ function addNewWidget() {
         <span class="widget-list__item-name">{{ widget.name }}</span>
       </div>
       <div v-if="canvas.widgets.length === 0" class="widget-list__empty">
-        No widgets yet
+        {{ t('widgetList.empty') }}
       </div>
     </div>
-    <button class="widget-list__add" @click="addNewWidget">+ New Widget</button>
+    <button class="widget-list__add" @click="addNewWidget">{{ t('widgetList.add') }}</button>
   </div>
 </template>
 

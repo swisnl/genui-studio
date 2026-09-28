@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { t } from '@/i18n'
 
 const props = withDefaults(defineProps<{
   visible: boolean
@@ -9,8 +10,8 @@ const props = withDefaults(defineProps<{
   cancelLabel?: string
   tone?: 'default' | 'danger'
 }>(), {
-  confirmLabel: 'Confirm',
-  cancelLabel: 'Cancel',
+  confirmLabel: undefined,
+  cancelLabel: undefined,
   tone: 'default',
 })
 
@@ -57,16 +58,16 @@ onBeforeUnmount(() => {
   <Transition name="confirm-dialog">
     <div v-if="visible" class="confirm-dialog-backdrop" @click="onBackdropClick">
       <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title">
-        <div class="confirm-dialog__eyebrow" :class="`confirm-dialog__eyebrow--${tone}`">Please confirm</div>
+        <div class="confirm-dialog__eyebrow" :class="`confirm-dialog__eyebrow--${tone}`">{{ t('confirmDialog.eyebrow') }}</div>
         <h2 id="confirm-dialog-title" class="confirm-dialog__title">{{ title }}</h2>
         <p class="confirm-dialog__description">{{ description }}</p>
 
         <div class="confirm-dialog__actions">
           <button ref="cancelButtonRef" class="confirm-dialog__btn confirm-dialog__btn--secondary" @click="emit('close')">
-            {{ cancelLabel }}
+            {{ cancelLabel ?? t('confirmDialog.cancel') }}
           </button>
           <button class="confirm-dialog__btn" :class="`confirm-dialog__btn--${tone}`" @click="emit('confirm')">
-            {{ confirmLabel }}
+            {{ confirmLabel ?? t('confirmDialog.confirm') }}
           </button>
         </div>
       </div>

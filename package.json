@@ -1,20 +1,31 @@
 {
   "name": "@swis/genui-studio",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "private": false,
   "type": "module",
   "files": [
     "bin",
-    "dist"
+    "dist",
+    "dist-embed"
   ],
   "bin": {
     "genui-studio": "bin/cli.js"
   },
+  "exports": {
+    ".": "./bin/cli.js",
+    "./embed": {
+      "types": "./dist-embed/client.d.ts",
+      "import": "./dist-embed/client.js"
+    },
+    "./dist/*": "./dist/*",
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "prepack": "npm run build",
     "dev": "vite",
-    "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "build": "vue-tsc -b && vite build && npm run build:embed",
+    "preview": "vite preview",
+    "build:embed": "vite build --config vite.embed.config.ts && tsc -p tsconfig.embed.json"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

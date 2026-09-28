@@ -22,6 +22,10 @@ export interface CanvasWidget {
   schema?: Record<string, unknown>
   previewData?: Record<string, unknown>
   locked: boolean
+  /** Identifier of this widget in an embedding host */
+  externalId?: string
+  /** Opaque host data, passed through untouched */
+  meta?: Record<string, unknown>
 }
 
 export interface SelectionState {

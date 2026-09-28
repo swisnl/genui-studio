@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useSelectionStore } from '@/stores/selection'
 import type { WidgetTemplate } from '@swis/genui-widgets'
+import { t } from '@/i18n'
 
 interface TreeNode {
   type: string
@@ -51,10 +52,10 @@ function onHoverNode(path: string | null) {
 <template>
   <div class="element-tree">
     <div class="element-tree__header">
-      <span class="element-tree__title">Elements</span>
+      <span class="element-tree__title">{{ t('elementTree.title') }}</span>
     </div>
     <div v-if="!tree" class="element-tree__empty">
-      Select a widget to inspect
+      {{ t('elementTree.empty') }}
     </div>
     <template v-else>
       <div class="element-tree__nodes" @mouseleave="onHoverNode(null)">

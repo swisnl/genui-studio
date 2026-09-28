@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import type { AgentMessage } from '@/stores/agent'
 import { useAgentStore } from '@/stores/agent'
 import { imageToDataUrl } from '@/utils/image'
+import { t } from '@/i18n'
 
 const props = defineProps<{
   message: AgentMessage
@@ -11,7 +12,7 @@ const props = defineProps<{
 const agent = useAgentStore()
 
 const roleLabel = computed(() => {
-  if (props.message.role === 'user') return 'You'
+  if (props.message.role === 'user') return t('chat.you')
   return props.message.model ?? agent.modelDisplayName
 })
 
@@ -31,7 +32,7 @@ function toggleTool(i: number) {
         :key="i"
         class="agent-message__image"
         :src="imageToDataUrl(img)"
-        :alt="img.name ?? `Image ${i + 1}`"
+        :alt="img.name ?? t('prompt.imageAlt', { n: i + 1 })"
         :title="img.name"
       />
     </div>

@@ -6,11 +6,12 @@ import { useThemeStore, type ThemePreset } from './theme'
 import { useHistoryStore } from './history'
 import { decompileToJsx } from '@/services/jsx-decompiler'
 import { extractBaseColors } from '@/utils/deriveTheme'
+import { isEmbedded } from '@/embed/mode'
+import { t } from '@/i18n'
 import type { Project, ProjectLibrary, ProjectSummary, StoredProject } from '@/types/project'
 
 const STORAGE_KEY = 'genui-studio-projects'
 const LEGACY_STORAGE_KEY = 'genui-studio-project'
-const DEFAULT_PROJECT_NAME = 'Untitled Project'
 const DEFAULT_PROJECT_VERSION = '1.0.0'
 
 let _projectCounter = 0
@@ -30,7 +31,7 @@ function cloneProject(project: Project): Project {
 
 function normalizeProjectName(value: string) {
   const trimmed = value.trim()
-  return trimmed || DEFAULT_PROJECT_NAME
+  return trimmed || t('project.untitled')
 }
 
 function matchesTheme(theme: ThemeConfig, reference: ThemeConfig) {
@@ -43,7 +44,7 @@ function detectThemePreset(theme: ThemeConfig): ThemePreset {
   return 'dark'
 }
 
-function createEmptyProject(name = DEFAULT_PROJECT_NAME): Project {
+function createEmptyProject(name = t('project.untitled')): Project {
   return {
     version: DEFAULT_PROJECT_VERSION,
     name: normalizeProjectName(name),
@@ -52,7 +53,7 @@ function createEmptyProject(name = DEFAULT_PROJECT_NAME): Project {
   }
 }
 
-function createStoredProject(name = DEFAULT_PROJECT_NAME, timestamp = Date.now()): StoredProject {
+function createStoredProject(name = t('project.untitled'), timestamp = Date.now()): StoredProject {
   return {
     id: createProjectId(),
     createdAt: timestamp,
@@ -65,7 +66,7 @@ function sanitizeProject(value: unknown): Project {
   const candidate = value && typeof value === 'object' ? (value as Partial<Project>) : {}
   return {
     version: typeof candidate.version === 'string' ? candidate.version : DEFAULT_PROJECT_VERSION,
-    name: normalizeProjectName(typeof candidate.name === 'string' ? candidate.name : DEFAULT_PROJECT_NAME),
+    name: normalizeProjectName(typeof candidate.name === 'string' ? candidate.name : t('project.untitled')),
     theme: candidate.theme && typeof candidate.theme === 'object' ? candidate.theme as ThemeConfig : undefined,
     lightColors: candidate.lightColors && typeof candidate.lightColors === 'object' ? candidate.lightColors : undefined,
     darkColors: candidate.darkColors && typeof candidate.darkColors === 'object' ? candidate.darkColors : undefined,
@@ -113,7 +114,7 @@ function sanitizeProjectLibrary(value: unknown): ProjectLibrary | null {
 }
 
 export const useProjectStore = defineStore('project', () => {
-  const name = ref(DEFAULT_PROJECT_NAME)
+  const name = ref(t('project.untitled'))
   const version = ref(DEFAULT_PROJECT_VERSION)
   const projects = ref<StoredProject[]>([])
   const activeProjectId = ref<string | null>(null)
@@ -191,6 +192,9 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   function persistLibrary() {
+    // An embedded studio holds the host's widgets, which must not leak into this browser's projects.
+    if (isEmbedded) return
+
     const payload: ProjectLibrary = {
       activeProjectId: activeProjectId.value,
       projects: projects.value,
@@ -290,7 +294,7 @@ export const useProjectStore = defineStore('project', () => {
     saveToLocalStorage()
   }
 
-  function buildUniqueProjectName(baseName = DEFAULT_PROJECT_NAME) {
+  function buildUniqueProjectName(baseName = t('project.untitled')) {
     const normalizedBase = normalizeProjectName(baseName)
     const existingNames = new Set(projects.value.map((project) => project.data.name.toLowerCase()))
     if (!existingNames.has(normalizedBase.toLowerCase())) return normalizedBase
