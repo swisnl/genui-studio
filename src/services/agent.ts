@@ -11,6 +11,8 @@ import { compileJsx } from './jsx-compiler'
 import { resolveTemplate } from '@swis/genui-widgets'
 import type { BaseColors } from '@/utils/deriveTheme'
 import type { ThemePreset } from '@/stores/theme'
+import type { AgentImage, AgentMessage } from '@/stores/agent'
+import { imageToDataUrl } from '@/utils/image'
 
 const THEME_COLOR_KEYS: (keyof BaseColors)[] = [
   'primary',
@@ -312,18 +314,12 @@ async function sendMessageAnthropic(
 
 async function sendMessageOpenAI(
   agent: ReturnType<typeof useAgentStore>,
-  userMessages: { role: string; content: string }[],
+  input: OpenAI.Responses.ResponseInputItem[],
   systemPrompt: string,
 ) {
   const client = new OpenAI({ apiKey: agent.openaiApiKey, dangerouslyAllowBrowser: true })
 
   agent.setThinkingPhase('Generating')
-
-  // The system prompt moves to `instructions`; conversation turns become input items.
-  const input: OpenAI.Responses.ResponseInputItem[] = userMessages.map((m) => ({
-    role: m.role as 'user' | 'assistant',
-    content: m.content,
-  }))
 
   const createResponse = () =>
     client.responses.create({
@@ -390,7 +386,42 @@ async function sendMessageOpenAI(
   return { textContent, toolCallsLog }
 }
 
-export async function sendMessage(userText: string) {
+function toAnthropicMessage(m: AgentMessage, text: string): Anthropic.MessageParam {
+  if (m.role !== 'user' || !m.images?.length) {
+    return { role: m.role, content: text }
+  }
+  return {
+    role: 'user',
+    content: [
+      ...m.images.map((img): Anthropic.ImageBlockParam => ({
+        type: 'image',
+        source: { type: 'base64', media_type: img.mediaType, data: img.data },
+      })),
+      // Image-only turns have no text; empty text blocks are rejected.
+      ...(text ? [{ type: 'text' as const, text }] : []),
+    ],
+  }
+}
+
+// The system prompt moves to `instructions`; conversation turns become input items.
+function toOpenAIInput(m: AgentMessage, text: string): OpenAI.Responses.ResponseInputItem {
+  if (m.role !== 'user' || !m.images?.length) {
+    return { role: m.role, content: text }
+  }
+  return {
+    role: 'user',
+    content: [
+      ...m.images.map((img): OpenAI.Responses.ResponseInputImage => ({
+        type: 'input_image',
+        image_url: imageToDataUrl(img),
+        detail: 'auto',
+      })),
+      ...(text ? [{ type: 'input_text' as const, text }] : []),
+    ],
+  }
+}
+
+export async function sendMessage(userText: string, images: AgentImage[] = []) {
   const agent = useAgentStore()
   const canvas = useCanvasStore()
   const selection = useSelectionStore()
@@ -398,7 +429,7 @@ export async function sendMessage(userText: string) {
   const history = useHistoryStore()
 
   agent.setError(null)
-  agent.addUserMessage(userText)
+  const userMessage = agent.addUserMessage(userText, images)
   agent.setStreaming(true)
   agent.setThinkingPhase('Thinking')
 
@@ -406,12 +437,18 @@ export async function sendMessage(userText: string) {
   const selectedWidgets = selection.selectedWidgets
   const allNames = canvas.widgets.map((w) => w.name)
   const userContext = buildUserContext(selectedWidgets, selection.elementPath, allNames)
-  const fullUserMessage = `${userContext}\n\n## User Request\n${userText}`
+  const imageContext = images.length > 0
+    ? `\n\n## Attached Images\nThe user attached ${images.length} image(s) as visual reference (e.g. a screenshot, mockup or design). Use them to match layout, content, and styling as closely as the available components allow.`
+    : ''
+  const fullUserMessage = `${userContext}${imageContext}\n\n## User Request\n${userText || 'Recreate the attached image(s) as a widget.'}`
   const systemPrompt = buildSystemPrompt(theme.tokens, {
     activePreset: theme.activePreset,
     lightColors: theme.lightColors,
     darkColors: theme.darkColors,
   })
+
+  // The latest user turn carries the full context; earlier turns are replayed as-is.
+  const textFor = (m: AgentMessage) => (m.id === userMessage.id ? fullUserMessage : m.content)
 
   try {
     history.beginBatch()
@@ -419,24 +456,11 @@ export async function sendMessage(userText: string) {
     let result: { textContent: string; toolCallsLog: { name: string; input: Record<string, unknown> }[] }
 
     if (agent.modelFamily === 'anthropic') {
-      const apiMessages: Anthropic.MessageParam[] = agent.messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }))
-      apiMessages[apiMessages.length - 1] = { role: 'user', content: fullUserMessage }
+      const apiMessages = agent.messages.map((m) => toAnthropicMessage(m, textFor(m)))
       result = await sendMessageAnthropic(agent, apiMessages, systemPrompt)
     } else {
-      const userMessages = agent.messages.map((m) => ({
-        role: m.role,
-        content: m.role === 'user' && m === agent.messages[agent.messages.length - 1]
-          ? fullUserMessage
-          : m.content,
-      }))
-      // Replace last user message with full context version
-      if (userMessages.length > 0) {
-        userMessages[userMessages.length - 1] = { role: 'user', content: fullUserMessage }
-      }
-      result = await sendMessageOpenAI(agent, userMessages, systemPrompt)
+      const input = agent.messages.map((m) => toOpenAIInput(m, textFor(m)))
+      result = await sendMessageOpenAI(agent, input, systemPrompt)
     }
 
     history.endBatch()

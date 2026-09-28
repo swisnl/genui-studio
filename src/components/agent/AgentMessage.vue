@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import type { AgentMessage } from '@/stores/agent'
 import { useAgentStore } from '@/stores/agent'
+import { imageToDataUrl } from '@/utils/image'
 
 const props = defineProps<{
   message: AgentMessage
@@ -24,7 +25,17 @@ function toggleTool(i: number) {
 <template>
   <div class="agent-message" :class="`agent-message--${message.role}`">
     <div class="agent-message__role">{{ roleLabel }}</div>
-    <div class="agent-message__content">{{ message.content }}</div>
+    <div v-if="message.images?.length" class="agent-message__images">
+      <img
+        v-for="(img, i) in message.images"
+        :key="i"
+        class="agent-message__image"
+        :src="imageToDataUrl(img)"
+        :alt="img.name ?? `Image ${i + 1}`"
+        :title="img.name"
+      />
+    </div>
+    <div v-if="message.content" class="agent-message__content">{{ message.content }}</div>
     <div v-if="message.toolCalls?.length" class="agent-message__tools">
       <div v-for="(call, i) in message.toolCalls" :key="i" class="agent-message__tool">
         <span class="agent-message__tool-name" @click="toggleTool(i)">{{ call.name }}</span>
@@ -58,6 +69,21 @@ function toggleTool(i: number) {
     font-size: 11px;
     font-weight: 600;
     margin-bottom: 2px;
+  }
+
+  &__images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 2px 0 4px;
+  }
+
+  &__image {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--studio-border);
   }
 
   &__content {

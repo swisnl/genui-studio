@@ -1,10 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
+export interface AgentImage {
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+  /** Base64-encoded image bytes (no data URL prefix) */
+  data: string
+  name?: string
+}
+
 export interface AgentMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
+  images?: AgentImage[]
   toolCalls?: { name: string; input: Record<string, unknown> }[]
   timestamp: number
   model?: string
@@ -19,9 +27,12 @@ export interface ModelOption {
 }
 
 export const MODEL_OPTIONS: ModelOption[] = [
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', family: 'anthropic' },
   { id: 'claude-opus-5', label: 'Claude Opus 5', family: 'anthropic' },
   { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', family: 'anthropic' },
   { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', family: 'anthropic' },
+  { id: 'gpt-6-sol', label: 'ChatGPT 6 - Sol', family: 'openai' },
+  { id: 'gpt-6-luna', label: 'ChatGPT 6 - Luna', family: 'openai' },
   { id: 'gpt-5.6-sol', label: 'ChatGPT 5.6 - Sol', family: 'openai' },
   { id: 'gpt-5.6-terra', label: 'ChatGPT 5.6 - Terra', family: 'openai' },
   { id: 'gpt-5.6-luna', label: 'ChatGPT 5.6 - Luna', family: 'openai' },
@@ -40,7 +51,8 @@ export const useAgentStore = defineStore('agent', () => {
   const hasApiKey = computed(() => apiKey.value.length > 0)
   const hasOpenaiApiKey = computed(() => openaiApiKey.value.length > 0)
 
-  const modelOption = computed(() => MODEL_OPTIONS.find((m) => m.id === selectedModel.value) ?? MODEL_OPTIONS[1])
+  const modelOption = computed(() => MODEL_OPTIONS.find((m) => m.id === selectedModel.value)
+    ?? MODEL_OPTIONS.find((m) => m.id === 'claude-sonnet-5')!)
   const modelFamily = computed<ModelFamily>(() => modelOption.value.family)
   const modelDisplayName = computed(() => modelOption.value.label)
   const hasActiveApiKey = computed(() =>
@@ -70,11 +82,12 @@ export const useAgentStore = defineStore('agent', () => {
     localStorage.setItem('genui-studio-selected-model', modelId)
   }
 
-  function addUserMessage(content: string): AgentMessage {
+  function addUserMessage(content: string, images?: AgentImage[]): AgentMessage {
     const msg: AgentMessage = {
       id: `msg_${Date.now()}`,
       role: 'user',
       content,
+      images: images?.length ? images : undefined,
       timestamp: Date.now(),
     }
     messages.value.push(msg)

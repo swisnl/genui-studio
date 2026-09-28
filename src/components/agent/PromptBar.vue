@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch } from 'vue'
 import { useAgentStore, MODEL_OPTIONS } from '@/stores/agent'
+import type { AgentImage } from '@/stores/agent'
 import { useCanvasStore } from '@/stores/canvas'
 import { useSelectionStore } from '@/stores/selection'
 import { getElementAtPath } from '@/services/prompts'
 import { sendMessage } from '@/services/agent'
+import { SUPPORTED_IMAGE_TYPES, imageToDataUrl, isSupportedImage, readImageFile } from '@/utils/image'
+
+const MAX_IMAGES = 5
 
 const props = defineProps<{ chatOpen: boolean }>()
 const emit = defineEmits<{ toggleChat: [] }>()
@@ -17,6 +21,15 @@ const showApiKey = ref(false)
 const apiKeyInput = ref('')
 const showModelSelect = ref(false)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const images = ref<AgentImage[]>([])
+const imageError = ref<string | null>(null)
+const isDragOver = ref(false)
+const acceptTypes = SUPPORTED_IMAGE_TYPES.join(',')
+
+const canSubmit = computed(() =>
+  (prompt.value.trim().length > 0 || images.value.length > 0) && !agent.isStreaming,
+)
 
 const context = computed(() => {
   const widgets = selection.selectedWidgets
@@ -81,19 +94,82 @@ function selectModel(modelId: string) {
   }
 }
 
+async function addImageFiles(files: Iterable<File>) {
+  imageError.value = null
+  for (const file of files) {
+    if (!isSupportedImage(file)) {
+      imageError.value = `"${file.name}" is not a supported image (PNG, JPEG, GIF or WebP).`
+      continue
+    }
+    if (images.value.length >= MAX_IMAGES) {
+      imageError.value = `You can attach up to ${MAX_IMAGES} images per message.`
+      break
+    }
+    try {
+      images.value.push(await readImageFile(file))
+    } catch (err) {
+      imageError.value = err instanceof Error ? err.message : 'Failed to read image'
+    }
+  }
+}
+
+function removeImage(index: number) {
+  images.value.splice(index, 1)
+  imageError.value = null
+}
+
+function onFileInputChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (input.files) addImageFiles(Array.from(input.files))
+  input.value = ''
+}
+
+function onPaste(e: ClipboardEvent) {
+  const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith('image/'))
+  if (files.length === 0) return
+  e.preventDefault()
+  addImageFiles(files)
+}
+
+function hasFiles(e: DragEvent) {
+  return e.dataTransfer?.types.includes('Files') ?? false
+}
+
+function onDragOver(e: DragEvent) {
+  if (!hasFiles(e)) return
+  e.preventDefault()
+  isDragOver.value = true
+}
+
+function onDragLeave(e: DragEvent) {
+  const related = e.relatedTarget as Node | null
+  if (related && (e.currentTarget as HTMLElement).contains(related)) return
+  isDragOver.value = false
+}
+
+function onDrop(e: DragEvent) {
+  isDragOver.value = false
+  if (!hasFiles(e)) return
+  e.preventDefault()
+  addImageFiles(Array.from(e.dataTransfer!.files))
+}
+
 async function onSubmit() {
   const text = prompt.value.trim()
-  if (!text || agent.isStreaming) return
+  if (!canSubmit.value) return
 
   if (!agent.hasActiveApiKey) {
     showApiKey.value = true
     return
   }
 
+  const attached = images.value
   prompt.value = ''
+  images.value = []
+  imageError.value = null
   nextTick(resizeTextarea)
   if (!props.chatOpen) emit('toggleChat')
-  await sendMessage(text)
+  await sendMessage(text, attached)
 }
 
 function saveApiKey() {
@@ -163,7 +239,13 @@ function onKeyDown(e: KeyboardEvent) {
     </div>
 
     <!-- Main prompt bar -->
-    <div class="prompt-bar">
+    <div
+      class="prompt-bar"
+      :class="{ 'prompt-bar--dragover': isDragOver }"
+      @dragover="onDragOver"
+      @dragleave="onDragLeave"
+      @drop="onDrop"
+    >
       <!-- Context indicator -->
       <div v-if="context" class="prompt-bar__context">
         <span
@@ -187,6 +269,27 @@ function onKeyDown(e: KeyboardEvent) {
           </span>
         </template>
       </div>
+      <!-- Attached images -->
+      <div v-if="images.length > 0 || imageError" class="prompt-bar__images">
+        <div
+          v-for="(img, i) in images"
+          :key="i"
+          class="prompt-bar__image"
+          :title="img.name"
+        >
+          <img :src="imageToDataUrl(img)" :alt="img.name ?? `Image ${i + 1}`" />
+          <button
+            class="prompt-bar__image-remove"
+            :aria-label="`Remove ${img.name ?? 'image'}`"
+            @click="removeImage(i)"
+          >
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+              <path d="M1.5 1.5l5 5M6.5 1.5l-5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <span v-if="imageError" class="prompt-bar__image-error">{{ imageError }}</span>
+      </div>
       <textarea
         ref="textareaRef"
         v-model="prompt"
@@ -196,8 +299,39 @@ function onKeyDown(e: KeyboardEvent) {
         :disabled="agent.isStreaming"
         @keydown="onKeyDown"
         @input="resizeTextarea"
+        @paste="onPaste"
       />
+      <input
+        ref="fileInputRef"
+        type="file"
+        :accept="acceptTypes"
+        multiple
+        hidden
+        @change="onFileInputChange"
+      />
+      <button
+        class="prompt-bar__send"
+        :disabled="!canSubmit"
+        @click="onSubmit"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M8 12V4M4 7l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
       <div class="prompt-bar__actions">
+        <button
+          class="prompt-bar__action-btn"
+          data-tooltip="Attach image"
+          :disabled="agent.isStreaming || images.length >= MAX_IMAGES"
+          @click="fileInputRef?.click()"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/>
+            <circle cx="6" cy="6.5" r="1.2" fill="currentColor"/>
+            <path d="M2.5 11.5l3.5-3.5 2.5 2.5 2-2 3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="prompt-bar__divider" />
         <button
           class="prompt-bar__model-btn"
           data-tooltip="Select model"
@@ -210,16 +344,6 @@ function onKeyDown(e: KeyboardEvent) {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M10 6a2 2 0 1 0-4 0 2 2 0 0 0 2 2v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
             <path d="M7 10h2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-          </svg>
-        </button>
-        <div class="prompt-bar__divider" />
-        <button
-          class="prompt-bar__send"
-          :disabled="!prompt.trim() || agent.isStreaming"
-          @click="onSubmit"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M8 12V4M4 7l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
       </div>
@@ -255,6 +379,63 @@ function onKeyDown(e: KeyboardEvent) {
   border: 1px solid var(--studio-glass-border);
   border-radius: 24px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.12s;
+
+  &--dragover {
+    border-color: var(--studio-accent);
+  }
+
+  &__images {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    padding: 2px 0 6px;
+  }
+
+  &__image {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    border: 1px solid var(--studio-border);
+    background: var(--studio-bg);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: inherit;
+      display: block;
+    }
+  }
+
+  &__image-remove {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--studio-border);
+    border-radius: 50%;
+    background: var(--studio-surface);
+    color: var(--studio-text-secondary);
+    cursor: pointer;
+
+    &:hover {
+      color: var(--studio-text-primary);
+    }
+  }
+
+  &__image-error {
+    font-size: 11px;
+    color: var(--studio-danger);
+  }
 
   &__context {
     display: flex;
@@ -317,7 +498,9 @@ function onKeyDown(e: KeyboardEvent) {
     display: flex;
     align-items: center;
     gap: 4px;
-    flex-shrink: 0;
+    flex-basis: 100%;
+    // Pull the first button's hit area out so its icon lines up with the input text
+    margin-left: -8px;
   }
 
   &__model-btn {
@@ -355,9 +538,14 @@ function onKeyDown(e: KeyboardEvent) {
     cursor: pointer;
     transition: all 0.12s;
 
-    &:hover {
+    &:hover:not(:disabled) {
       color: var(--studio-text-primary);
       background: var(--studio-hover);
+    }
+
+    &:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
     }
   }
 
@@ -369,6 +557,7 @@ function onKeyDown(e: KeyboardEvent) {
   }
 
   &__send {
+    flex-shrink: 0;
     width: 32px;
     height: 32px;
     display: flex;
