@@ -20,7 +20,7 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
       - name: Install npm modules
-        run: npm ci
+        run: npm install
       - name: Create tarball
         run: npm pack
 
