@@ -2,6 +2,16 @@
 
 All notable changes to `genui-studio` will be documented in this file.
 
+## Unreleased
+
+### Added
+- WebMCP tools: agents can build widgets on the board with `generate_widget`, `list_widgets`, `get_widget`, `set_widget_data`, `delete_widget`, `get_authoring_guide`, `create_widget` and `update_widget`. Embedded, the tools are exposed to the host page (iframe needs `allow="tools"`)
+- `getStudioTools()` and `onStudioToolsChange()` in `@swis/genui-studio/embed`
+
+### Changed
+- An agent run stops after 8 tool rounds
+- Agent edits to a widget are now part of the undo history
+
 ## 1.4.0
 
 ### Added
