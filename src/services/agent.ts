@@ -8,7 +8,9 @@ import { useHistoryStore } from '@/stores/history'
 import { buildSystemPrompt, buildUserContext } from './prompts'
 import { validateTemplate, normalizeTemplate } from './validation'
 import { compileJsx } from './jsx-compiler'
+import { decompileToJsx } from './jsx-decompiler'
 import { resolveTemplate } from '@swis/genui-widgets'
+import type { CanvasWidget } from '@/types/canvas'
 import type { BaseColors } from '@/utils/deriveTheme'
 import type { ThemePreset } from '@/stores/theme'
 import type { AgentImage, AgentMessage } from '@/stores/agent'
@@ -149,7 +151,10 @@ const openaiTools: OpenAI.Responses.FunctionTool[] = anthropicTools.map((t) => (
 // significantly more headroom than Anthropic's to still fit a widget template.
 const OPENAI_MAX_OUTPUT_TOKENS = 16384
 
-function compileAndValidate(
+// Guards against a model that keeps calling tools (e.g. failing validation forever).
+const MAX_TOOL_ROUNDS = 8
+
+export function compileAndValidate(
   templateSource: string,
   previewData?: Record<string, unknown>,
 ): { template: import('@swis/genui-widgets').WidgetTemplate; errors: string[] } {
@@ -174,8 +179,72 @@ function parseJsonField(value: unknown): Record<string, unknown> | undefined {
   return undefined
 }
 
-function handleToolCall(name: string, input: Record<string, unknown>): string {
+export type WidgetWriteResult =
+  | { ok: true; widget: CanvasWidget }
+  | { ok: false; code: 'validation' | 'not_found'; errors: string[] }
+
+export interface CreateWidgetInput {
+  name: string
+  templateSource: string
+  schema?: Record<string, unknown>
+  previewData?: Record<string, unknown>
+  externalId?: string
+  meta?: Record<string, unknown>
+}
+
+export function createWidgetFromSource(input: CreateWidgetInput): WidgetWriteResult {
   const canvas = useCanvasStore()
+  const { template, errors } = compileAndValidate(input.templateSource, input.previewData)
+  if (errors.length > 0) return { ok: false, code: 'validation', errors }
+
+  const widget = canvas.addWidget(
+    input.name,
+    template,
+    undefined,
+    undefined,
+    input.templateSource,
+    input.schema,
+    input.previewData,
+  )
+  if (input.externalId !== undefined) widget.externalId = input.externalId
+  if (input.meta !== undefined) widget.meta = input.meta
+  return { ok: true, widget }
+}
+
+export interface UpdateWidgetInput {
+  id: string
+  name?: string
+  templateSource?: string
+  schema?: Record<string, unknown>
+  previewData?: Record<string, unknown>
+}
+
+/** Recompiles a widget; omitted fields keep their current value. */
+export function updateWidgetFromSource(input: UpdateWidgetInput): WidgetWriteResult {
+  const canvas = useCanvasStore()
+  const history = useHistoryStore()
+  const w = canvas.getWidget(input.id)
+  if (!w) return { ok: false, code: 'not_found', errors: [`Widget ${input.id} not found`] }
+
+  const templateSource = input.templateSource ?? w.templateSource ?? decompileToJsx(w.template)
+  const previewData = input.previewData ?? w.previewData
+  const { template, errors } = compileAndValidate(templateSource, previewData)
+  if (errors.length > 0) return { ok: false, code: 'validation', errors }
+
+  history.commit()
+  w.template = template
+  w.templateSource = templateSource
+  if (input.name !== undefined) w.name = input.name
+  if (input.schema !== undefined) w.schema = input.schema
+  if (input.previewData !== undefined) w.previewData = input.previewData
+  return { ok: true, widget: w }
+}
+
+function validationMessage(errors: string[]): string {
+  return `VALIDATION_ERROR: The template is invalid:\n${errors.join('\n')}\nPlease fix these issues and try again with corrected JSX markup.`
+}
+
+function handleToolCall(name: string, input: Record<string, unknown>, run?: RunTracker): string {
   const theme = useThemeStore()
   const agent = useAgentStore()
 
@@ -183,43 +252,27 @@ function handleToolCall(name: string, input: Record<string, unknown>): string {
 
   switch (name) {
     case 'create_widget': {
-      const templateSource = input.templateSource as string
-      const previewData = parseJsonField(input.previewData)
-      const schema = parseJsonField(input.schema)
-
-      const { template, errors } = compileAndValidate(templateSource, previewData)
-      if (errors.length > 0) {
-        return `VALIDATION_ERROR: The template is invalid:\n${errors.join('\n')}\nPlease fix these issues and try again with corrected JSX markup.`
-      }
-
-      const widget = canvas.addWidget(
-        input.name as string,
-        template,
-        undefined,
-        undefined,
-        templateSource,
-        schema,
-        previewData,
-      )
-      return `Created widget "${widget.name}" (id: ${widget.id})`
+      const result = createWidgetFromSource({
+        name: input.name as string,
+        templateSource: input.templateSource as string,
+        schema: parseJsonField(input.schema),
+        previewData: parseJsonField(input.previewData),
+      })
+      if (!result.ok) return validationMessage(result.errors)
+      run?.createdIds.push(result.widget.id)
+      return `Created widget "${result.widget.name}" (id: ${result.widget.id})`
     }
     case 'update_widget': {
-      const templateSource = input.templateSource as string
-      const previewData = parseJsonField(input.previewData)
-      const schema = parseJsonField(input.schema)
-
-      const { template, errors } = compileAndValidate(templateSource, previewData)
-      if (errors.length > 0) {
-        return `VALIDATION_ERROR: The template is invalid:\n${errors.join('\n')}\nPlease fix these issues and try again with corrected JSX markup.`
+      const result = updateWidgetFromSource({
+        id: input.id as string,
+        templateSource: input.templateSource as string,
+        schema: parseJsonField(input.schema),
+        previewData: parseJsonField(input.previewData),
+      })
+      if (!result.ok) {
+        return result.code === 'not_found' ? result.errors[0] : validationMessage(result.errors)
       }
-
-      const w = canvas.getWidget(input.id as string)
-      if (!w) return `Widget ${input.id} not found`
-
-      w.template = template
-      w.templateSource = templateSource
-      if (schema !== undefined) w.schema = schema
-      if (previewData !== undefined) w.previewData = previewData
+      if (!run?.updatedIds.includes(result.widget.id)) run?.updatedIds.push(result.widget.id)
       return `Updated widget ${input.id}`
     }
     case 'set_theme_colors': {
@@ -256,10 +309,17 @@ function handleToolCall(name: string, input: Record<string, unknown>): string {
   }
 }
 
+/** Widgets touched during one agent run. */
+interface RunTracker {
+  createdIds: string[]
+  updatedIds: string[]
+}
+
 async function sendMessageAnthropic(
   agent: ReturnType<typeof useAgentStore>,
   apiMessages: Anthropic.MessageParam[],
   systemPrompt: string,
+  run: RunTracker,
 ) {
   const provider = agent.providers.anthropic
   const client = new Anthropic({
@@ -282,6 +342,7 @@ async function sendMessageAnthropic(
 
   let textContent = ''
   const toolCallsLog: { name: string; input: Record<string, unknown> }[] = []
+  let rounds = 0
 
   while (true) {
     for (const block of response.content) {
@@ -290,7 +351,7 @@ async function sendMessageAnthropic(
         agent.streamingContent = textContent
       } else if (block.type === 'tool_use') {
         agent.setThinkingPhase('validating')
-        const result = handleToolCall(block.name, block.input as Record<string, unknown>)
+        const result = handleToolCall(block.name, block.input as Record<string, unknown>, run)
         toolCallsLog.push({ name: block.name, input: block.input as Record<string, unknown> })
 
         apiMessages.push({ role: 'assistant', content: response.content })
@@ -305,7 +366,7 @@ async function sendMessageAnthropic(
       }
     }
 
-    if (response.stop_reason === 'tool_use') {
+    if (response.stop_reason === 'tool_use' && ++rounds < MAX_TOOL_ROUNDS) {
       agent.setThinkingPhase('generating')
       response = await client.messages.create({
         model: agent.selectedModel,
@@ -326,6 +387,7 @@ async function sendMessageOpenAI(
   agent: ReturnType<typeof useAgentStore>,
   input: OpenAI.Responses.ResponseInputItem[],
   systemPrompt: string,
+  run: RunTracker,
 ) {
   const provider = agent.providers.openai
   const client = new OpenAI({
@@ -355,6 +417,7 @@ async function sendMessageOpenAI(
 
   let textContent = ''
   const toolCallsLog: { name: string; input: Record<string, unknown> }[] = []
+  let rounds = 0
 
   while (true) {
     if (response.output_text) {
@@ -378,11 +441,12 @@ async function sendMessageOpenAI(
     agent.setThinkingPhase('validating')
 
     // Replay every output item — reasoning items included — before the outputs.
-    input.push(...response.output)
+    // Output items are valid input items; the SDK types only disagree on the `status` union.
+    input.push(...(response.output as OpenAI.Responses.ResponseInputItem[]))
 
     for (const call of functionCalls) {
       const args = JSON.parse(call.arguments) as Record<string, unknown>
-      const result = handleToolCall(call.name, args)
+      const result = handleToolCall(call.name, args, run)
       toolCallsLog.push({ name: call.name, input: args })
 
       input.push({
@@ -396,6 +460,7 @@ async function sendMessageOpenAI(
       }
     }
 
+    if (++rounds >= MAX_TOOL_ROUNDS) break
     agent.setThinkingPhase('generating')
     response = await createResponse()
   }
@@ -438,12 +503,33 @@ function toOpenAIInput(m: AgentMessage, text: string): OpenAI.Responses.Response
   }
 }
 
-export async function sendMessage(userText: string, images: AgentImage[] = []) {
+export interface SendMessageOptions {
+  /** Send only this turn, without replaying the earlier chat. */
+  freshContext?: boolean
+  /** Widgets to edit. Replaces the user's selection as context; `[]` means none. */
+  targetWidgetIds?: string[]
+  /** Real data the widget should be built around. */
+  data?: Record<string, unknown>
+}
+
+export type SendMessageResult =
+  | { ok: true; text: string; createdIds: string[]; updatedIds: string[] }
+  | { ok: false; code: 'busy' | 'llm'; message: string; status: number | null }
+
+export async function sendMessage(
+  userText: string,
+  images: AgentImage[] = [],
+  opts: SendMessageOptions = {},
+): Promise<SendMessageResult> {
   const agent = useAgentStore()
   const canvas = useCanvasStore()
   const selection = useSelectionStore()
   const theme = useThemeStore()
   const history = useHistoryStore()
+
+  if (agent.isStreaming) {
+    return { ok: false, code: 'busy', message: 'The studio agent is already working on a request.', status: null }
+  }
 
   agent.setError(null)
   const userMessage = agent.addUserMessage(userText, images)
@@ -451,13 +537,19 @@ export async function sendMessage(userText: string, images: AgentImage[] = []) {
   agent.setThinkingPhase('thinking')
 
   // Build context
-  const selectedWidgets = selection.selectedWidgets
+  const contextWidgets = opts.targetWidgetIds
+    ? opts.targetWidgetIds.map((id) => canvas.getWidget(id)).filter((w): w is CanvasWidget => !!w)
+    : selection.selectedWidgets
+  const elementPath = opts.targetWidgetIds ? null : selection.elementPath
   const allNames = canvas.widgets.map((w) => w.name)
-  const userContext = buildUserContext(selectedWidgets, selection.elementPath, allNames)
+  const userContext = buildUserContext(contextWidgets, elementPath, allNames)
   const imageContext = images.length > 0
     ? `\n\n## Attached Images\nThe user attached ${images.length} image(s) as visual reference (e.g. a screenshot, mockup or design). Use them to match layout, content, and styling as closely as the available components allow.`
     : ''
-  const fullUserMessage = `${userContext}${imageContext}\n\n## User Request\n${userText || 'Recreate the attached image(s) as a widget.'}`
+  const dataContext = opts.data
+    ? `\n\n## Data\nBuild the widget around this real data. Use it as previewData and derive the schema from it; bind every value with {{ }} expressions instead of hard-coding it.\n\`\`\`json\n${JSON.stringify(opts.data, null, 2)}\n\`\`\``
+    : ''
+  const fullUserMessage = `${userContext}${imageContext}${dataContext}\n\n## User Request\n${userText || 'Recreate the attached image(s) as a widget.'}`
   const systemPrompt = buildSystemPrompt(theme.tokens, {
     activePreset: theme.activePreset,
     lightColors: theme.lightColors,
@@ -466,6 +558,8 @@ export async function sendMessage(userText: string, images: AgentImage[] = []) {
 
   // The latest user turn carries the full context; earlier turns are replayed as-is.
   const textFor = (m: AgentMessage) => (m.id === userMessage.id ? fullUserMessage : m.content)
+  const turns = opts.freshContext ? [userMessage] : agent.messages
+  const run: RunTracker = { createdIds: [], updatedIds: [] }
 
   try {
     history.beginBatch()
@@ -473,21 +567,23 @@ export async function sendMessage(userText: string, images: AgentImage[] = []) {
     let result: { textContent: string; toolCallsLog: { name: string; input: Record<string, unknown> }[] }
 
     if (agent.modelFamily === 'anthropic') {
-      const apiMessages = agent.messages.map((m) => toAnthropicMessage(m, textFor(m)))
-      result = await sendMessageAnthropic(agent, apiMessages, systemPrompt)
+      const apiMessages = turns.map((m) => toAnthropicMessage(m, textFor(m)))
+      result = await sendMessageAnthropic(agent, apiMessages, systemPrompt, run)
     } else {
-      const input = agent.messages.map((m) => toOpenAIInput(m, textFor(m)))
-      result = await sendMessageOpenAI(agent, input, systemPrompt)
+      const input = turns.map((m) => toOpenAIInput(m, textFor(m)))
+      result = await sendMessageOpenAI(agent, input, systemPrompt, run)
     }
 
     history.endBatch()
     agent.addAssistantMessage(result.textContent, result.toolCallsLog.length > 0 ? result.toolCallsLog : undefined)
+    return { ok: true, text: result.textContent, ...run }
   } catch (err) {
     history.endBatch()
     const msg = err instanceof Error ? err.message : 'Unknown error'
     // Both SDKs expose the HTTP status on their API errors.
     const status = typeof (err as { status?: unknown })?.status === 'number' ? (err as { status: number }).status : null
     agent.setError(msg, status)
+    return { ok: false, code: 'llm', message: msg, status }
   } finally {
     agent.setStreaming(false)
   }

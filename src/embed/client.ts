@@ -40,6 +40,37 @@ export interface StudioEmbed {
 
 const REQUEST_TIMEOUT_MS = 10_000
 
+/** A WebMCP tool as returned by `modelContext.getTools()`. */
+export interface StudioWebMcpTool {
+  name: string
+  description: string
+  inputSchema?: Record<string, unknown>
+  [key: string]: unknown
+}
+
+interface HostModelContext extends EventTarget {
+  getTools(options?: { fromOrigins?: string[] }): Promise<StudioWebMcpTool[]>
+}
+
+/**
+ * The studio registers its widget tools (`generate_widget`, `list_widgets`, …) with WebMCP and
+ * exposes them to the host page. The iframe needs `allow="tools"` for this. Returns the tools
+ * the host can see, including its own; `[]` when the browser has no WebMCP.
+ */
+export async function getStudioTools(studioOrigin: string): Promise<StudioWebMcpTool[]> {
+  const modelContext = (document as Document & { modelContext?: HostModelContext }).modelContext
+  if (!modelContext?.getTools) return []
+  return modelContext.getTools({ fromOrigins: [studioOrigin] })
+}
+
+/** Calls `callback` whenever the set of WebMCP tools changes, e.g. once the studio registered. Returns an unsubscribe function. */
+export function onStudioToolsChange(callback: () => void): () => void {
+  const modelContext = (document as Document & { modelContext?: HostModelContext }).modelContext
+  if (!modelContext) return () => {}
+  modelContext.addEventListener('toolchange', callback)
+  return () => modelContext.removeEventListener('toolchange', callback)
+}
+
 export function createStudioEmbed(options: StudioEmbedOptions): StudioEmbed {
   const { iframe } = options
   const origin = options.origin ?? new URL(iframe.src, location.href).origin

@@ -23,12 +23,15 @@
     <button id="scheme">Toggle host light/dark mode</button>
     <button id="locale">Toggle locale (en/nl)</button>
     <button id="theme-card">Toggle theme card</button>
+    <button id="tools">WebMCP: list studio tools</button>
+    <button id="generate">WebMCP: generate_widget (employee card)</button>
     <pre id="log"></pre>
   </aside>
-  <iframe id="studio" title="GenUI Studio"></iframe>
+  <!-- allow="tools" lets the studio register WebMCP tools from inside the iframe. -->
+  <iframe id="studio" title="GenUI Studio" allow="tools"></iframe>
 
   <script type="module">
-    import { createStudioEmbed } from '/src/embed/client.ts'
+    import { createStudioEmbed, getStudioTools, onStudioToolsChange } from '/src/embed/client.ts'
 
     // `?studio=<origin>` loads the studio from another origin, to check that it ignores this page.
     const studioOrigin = new URLSearchParams(location.search).get('studio') ?? location.origin
@@ -133,6 +136,25 @@
       log(`updateConfig (themeCard: ${themeCard})`)
     }
     document.getElementById('fix-token').onclick = () => { studio.updateConfig(config('test-token')); log('updateConfig (right token)') }
+
+    // WebMCP: the studio's tools, as an agent on this page would see them.
+    onStudioToolsChange(() => log('WebMCP toolchange'))
+    document.getElementById('tools').onclick = async () => {
+      if (!document.modelContext) return log('WebMCP not available in this browser')
+      log('getTools', (await getStudioTools(studioOrigin)).map((t) => t.name))
+    }
+    document.getElementById('generate').onclick = async () => {
+      if (!document.modelContext) return log('WebMCP not available in this browser')
+      const tool = (await getStudioTools(studioOrigin)).find((t) => t.name === 'generate_widget')
+      if (!tool) return log('generate_widget not found')
+      log('executeTool generate_widget …')
+      const result = await document.modelContext.executeTool(tool, {
+        prompt: 'An employee card with name, role, department and email.',
+        data: { name: 'Grace Hopper', role: 'Rear Admiral', department: 'Navy', email: 'grace@example.com' },
+        externalId: '201',
+      })
+      log('generate_widget result', typeof result === 'string' ? JSON.parse(result) : result)
+    }
   </script>
 </body>
 </html>

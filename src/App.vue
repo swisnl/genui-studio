@@ -15,6 +15,7 @@ import ElementTree from '@/components/sidebar/ElementTree.vue'
 import { isEmbedded } from '@/embed/mode'
 import { t } from '@/i18n'
 import { embedInitialized, startEmbedBridge } from '@/embed/bridge'
+import { registerStudioTools } from '@/webmcp/register'
 
 const project = useProjectStore()
 const history = useHistoryStore()
@@ -56,6 +57,7 @@ watch(
 onMounted(async () => {
   await history.init()
   theme.updateStudioCssVariables()
+  void registerStudioTools()
 
   if (isEmbedded) {
     // The host owns the widgets; wait for it instead of loading local projects.

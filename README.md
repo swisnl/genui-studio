@@ -45,6 +45,37 @@ PORT=3000 npx @swis/genui-studio
 
 API keys can be entered directly in the app's prompt bar.
 
+## WebMCP tools
+
+In browsers with [WebMCP](https://developer.chrome.com/docs/ai/webmcp/imperative-api), the studio registers tools that let any agent build widgets on the board:
+
+| Tool | Purpose |
+|---|---|
+| `generate_widget` | Design a widget from a prompt with the studio's own agent. Pass `data` to build it around real values, `widgetId` to change an existing one |
+| `list_widgets`, `get_widget` | Read the board |
+| `set_widget_data` | Replace a widget's data without redesigning it |
+| `delete_widget` | Remove a widget |
+| `get_authoring_guide`, `create_widget`, `update_widget` | Write widget JSX yourself, with validation errors returned for retries |
+
+Every tool returns JSON: `{ "ok": true, ... }` or `{ "ok": false, "error": { "code", "message" } }`.
+
+When the studio is embedded (`?embed=1&parentOrigin=...`), its tools are exposed to the host page. Grant the iframe the `tools` permission and read them with `fromOrigins`:
+
+```html
+<iframe src="https://studio.example.com/?embed=1&parentOrigin=https://host.example.com" allow="tools"></iframe>
+```
+
+```js
+import { getStudioTools, onStudioToolsChange } from '@swis/genui-studio/embed'
+
+const tools = await getStudioTools('https://studio.example.com')
+// Hand these to your agent, or run one directly:
+const generate = tools.find((t) => t.name === 'generate_widget')
+await document.modelContext.executeTool(generate, { prompt: 'An employee card', data: { name: 'Grace Hopper' } })
+```
+
+New and changed widgets reach the host through the embed client's `onChange`, as with manual edits. `generate_widget` uses the LLM provider configured in the embed config.
+
 ## Development
 
 If you want to contribute or run from source:
