@@ -297,12 +297,29 @@ const TOOLS: StudioTool[] = [
   },
 ]
 
+// Some WebMCP implementations pass the arguments as a JSON string instead of an object.
+function parseArgs(args: unknown): JsonObject {
+  if (args === undefined || args === null || args === '') return {}
+  let value = args
+  if (typeof args === 'string') {
+    try {
+      value = JSON.parse(args)
+    } catch {
+      throw new ToolError('invalid_input', 'Arguments must be a JSON object')
+    }
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new ToolError('invalid_input', 'Arguments must be a JSON object')
+  }
+  return value as JsonObject
+}
+
 /** The studio's tools, with errors turned into `{ ok: false, error }` results the calling agent can act on. */
 export const studioTools: StudioTool[] = TOOLS.map((tool) => ({
   ...tool,
   async execute(args) {
     try {
-      return await tool.execute(args ?? {})
+      return await tool.execute(parseArgs(args))
     } catch (err) {
       if (err instanceof ToolError) return fail(err.code, err.message, err.details)
       return fail('internal', err instanceof Error ? err.message : String(err))
